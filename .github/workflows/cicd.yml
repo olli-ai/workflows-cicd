@@ -33,7 +33,7 @@ env:
   NAMESPACE_PROD: "service-production"
 
 jobs:
-  ci-cd-dev:
+  DEV-ENV:
     if: github.ref == 'refs/heads/dev'
     runs-on: Linux 
     permissions:
@@ -103,7 +103,7 @@ jobs:
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
      
-  ci-cd-stg:
+  STAGING-ENV:
     if: github.ref == 'refs/heads/master'
     runs-on: Linux 
     permissions:
@@ -173,7 +173,7 @@ jobs:
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           
-  ci-cd-prod:
+  UAT-PRODUCTION-ENV:
     if: github.ref == 'refs/heads/pre-production'
     runs-on: Linux 
     permissions:
