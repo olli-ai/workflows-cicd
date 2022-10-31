@@ -7,6 +7,9 @@ on:
       appName:
         required: true
         type: string
+      approvers:
+        required: true
+        type: string
     secrets:
       DOCKER_USERNAME:
         required: true
@@ -248,7 +251,7 @@ jobs:
         timeout-minutes: 1
         with:
           secret: ${{ secrets.TOKEN }}
-          approvers: HoaNM98,sonlm # SHOULD CHANGE
+          approvers: ${{ inputs.approvers }}
           minimum-approvals: 1
       
       - name: Change Tag Image Production
