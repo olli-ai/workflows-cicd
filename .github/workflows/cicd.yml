@@ -1,0 +1,296 @@
+on:
+  workflow_call:
+    inputs:
+      imageName:
+        required: true
+        type: string
+      appName:
+        required: true
+        type: string
+    secrets:
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_SECRET:
+        required: true
+      SLACK_WEBHOOK:
+        required: true
+      KUBE_CONFIG_DATA:
+        required: true
+env:
+  # CI
+  REGISTRY: harbor.jenkins-x-viettel.iviet.com
+  IMAGE_NAME: ${{ inputs.imageName }}
+  ENV_DEV: dev
+  ENV_STG: stg 
+  ENV_PRE-PROD: uat
+  ENV_PROD: prod
+  # CD
+  RELEASE_NAME: "chart-k8s"
+  APP_NAME: ${{ inputs.appName }}
+  NAMESPACE_DEV: "service-dev"
+  NAMESPACE_STG: "service-staging"
+  NAMESPACE_PRE-PROD: "service-uat"
+  NAMESPACE_PROD: "service-production"
+
+jobs:
+  ci-cd-dev:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: Linux 
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v1
+        with:
+          fetch-depth: 0
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_SECRET }}
+
+      - name: Generate Tag Version
+        id: version
+        uses: paulhatch/semantic-version@v4.0.2
+        with:
+          bump_each_commit: true
+
+      - name: Build & Tag & Push Docker image
+        env:
+          TAG: ${{steps.version.outputs.version}}
+        run: |
+          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          
+      - name: Helm Deploy Kubernetes
+        id: helm-dev
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+          TAG: ${{steps.version.outputs.version}}
+        with:
+          command: |
+            helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
+            helm repo update
+            helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service -i -f values-dev.yaml --set image.tag=${{env.TAG}}
+            
+      - name: Slack Notification Success
+        if: ${{ success() }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':bell: FINISHED'
+          SLACK_TITLE: 'Status Deploy Service Dev: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+    
+      - name: Slack Notification Failed
+        if: ${{ failure() && steps.helm-dev.conclusion == 'failure' }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':x: ERROR'
+          SLACK_TITLE: 'Status Deploy Service Dev: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+     
+  ci-cd-stg:
+    if: github.ref == 'refs/heads/master'
+    runs-on: Linux 
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v1
+        with:
+          fetch-depth: 0
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_SECRET }}
+
+      - name: Generate Tag Version
+        id: version
+        uses: paulhatch/semantic-version@v4.0.2
+        with:
+          bump_each_commit: true
+
+      - name: Build & Tag & Push Docker image
+        env:
+          TAG: ${{steps.version.outputs.version}}
+        run: |
+          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+      
+      - name: Helm Deploy Service on Staging
+        id: helm-stg
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+          TAG: ${{steps.version.outputs.version}}
+        with:
+          command: |
+            helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
+            helm repo update
+            helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service --install --wait -f values-stg.yaml --set image.tag=${{env.TAG}} --atomic
+
+      - name: Slack Notification Success
+        if: ${{ success() }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':bell: FINISHED'
+          SLACK_TITLE: 'Status Deploy Service Staging: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+    
+      - name: Slack Notification Failed
+        if: ${{ failure() && steps.helm-stg.conclusion == 'failure' }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':x: ERROR'
+          SLACK_TITLE: 'Status Deploy Service Staging: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          
+  ci-cd-prod:
+    if: github.ref == 'refs/heads/pre-production'
+    runs-on: Linux 
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v1
+        with:
+          fetch-depth: 0
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_SECRET }}
+
+      - name: Generate Tag Version
+        id: version
+        uses: paulhatch/semantic-version@v4.0.2
+        with:
+          bump_each_commit: true
+
+      - name: Build & Tag & Push Docker image
+        env:
+          TAG: ${{steps.version.outputs.version}}
+        run: |
+          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+      
+      - name: Helm Deploy Service on UAT
+        id: helm-uat
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+          TAG: ${{steps.version.outputs.version}}
+        with:
+          command: |
+            helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
+            helm repo update
+            helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service --install --wait -f values-uat.yaml --set image.tag=${{env.TAG}} --atomic
+
+      - name: Slack Notification Success
+        if: ${{ success() }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':bell: FINISHED'
+          SLACK_TITLE: 'Status Deploy Service UAT: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+    
+      - name: Slack Notification Failed
+        if: ${{ failure() && steps.helm-uat.conclusion == 'failure' }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':x: ERROR'
+          SLACK_TITLE: 'Status Deploy Service UAT: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          
+      - name: Trigger Deploy Service to Production
+        uses: trstringer/manual-approval@v1
+        timeout-minutes: 1
+        with:
+          secret: ${{ secrets.TOKEN }}
+          approvers: HoaNM98,sonlm # SHOULD CHANGE
+          minimum-approvals: 1
+      
+      - name: Change Tag Image Production
+        env:        
+          TAG: ${{steps.version.outputs.version}}
+        run: |
+          docker pull ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+
+      - name: Helm Deploy Service on Production
+        id: helm-prod
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+          TAG: ${{steps.version.outputs.version}}
+        with:
+          command: |
+            helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
+            helm repo update
+            helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service --install --wait -f values-prod.yaml --set image.tag=${{env.TAG}} --atomic  
+            
+      - name: Slack Notification Success
+        if: ${{ success() }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':bell: FINISHED'
+          SLACK_TITLE: 'Status Deploy Service Production: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+    
+      - name: Slack Notification Failed
+        if: ${{ failure() && steps.helm-prod.conclusion == 'failure' }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':x: ERROR'
+          SLACK_TITLE: 'Status Deploy Service Production: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }} 
