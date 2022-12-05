@@ -21,6 +21,10 @@ on:
         required: true
       TOKEN:
         required: true
+      GIT_USERNAME:
+        required: true
+      GIT_PASSWORD:
+        required: true
 env:
   # CI
   REGISTRY: harbor.jenkins-x-viettel.iviet.com
@@ -68,7 +72,7 @@ jobs:
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
-          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
+          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} --build-arg username=${{secrets.GIT_USERNAME}} --build-arg password=${{secrets.GIT_PASSWORD}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           
@@ -138,7 +142,7 @@ jobs:
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
-          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
+          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} --build-arg username=${{secrets.GIT_USERNAME}} --build-arg password=${{secrets.GIT_PASSWORD}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
       
@@ -208,7 +212,7 @@ jobs:
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
-          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
+          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} --build-arg username=${{secrets.GIT_USERNAME}} --build-arg password=${{secrets.GIT_PASSWORD}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
       
