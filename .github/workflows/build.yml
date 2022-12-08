@@ -39,6 +39,11 @@ env:
 
 jobs:
   DEV:
+    runs-on: Linux 
+    permissions:
+      contents: read
+      packages: write
+      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v1
