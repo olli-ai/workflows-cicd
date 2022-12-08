@@ -39,6 +39,12 @@ env:
 
 jobs:
   DEV:
+    runs-on: Linux 
+    permissions:
+      contents: read
+      packages: write
+      
+    steps:
       - name: Helm Deploy Kubernetes
         id: helm-dev
         uses: koslib/helm-eks-action@master
