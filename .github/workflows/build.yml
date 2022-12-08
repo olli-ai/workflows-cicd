@@ -71,3 +71,8 @@ jobs:
           docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          
+      - name: Commit & Push changes
+        uses: actions-js/push@master
+        with:
+          github_token: ${{ secrets.TOKEN }}
