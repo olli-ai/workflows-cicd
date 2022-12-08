@@ -1,0 +1,34 @@
+name: Dev Build & Release
+
+on:
+  push:
+    branches: ["dev"]
+    paths-ignore:
+      - 'values-dev.yaml'
+    
+jobs:
+  build:
+    uses: olli-ai/workflows-cicd/.github/workflows/build.yml@dev
+    with:
+      imageName: "maika-sh-adapter-service" 
+      appName: "maika-sh-adapter-service" 
+      approvers: HoaNM98,sonlm
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_SECRET: ${{ secrets.DOCKER_SECRET }}
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+      TOKEN: ${{ secrets.TOKEN }}
+  deploy:
+    uses: olli-ai/workflows-cicd/.github/workflows/deploy.yml@dev
+    with:
+      imageName: "maika-sh-adapter-service" 
+      appName: "maika-sh-adapter-service" 
+      approvers: HoaNM98,sonlm
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_SECRET: ${{ secrets.DOCKER_SECRET }}
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+      TOKEN: ${{ secrets.TOKEN }}
+    
