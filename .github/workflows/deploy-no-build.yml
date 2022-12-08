@@ -43,8 +43,13 @@ jobs:
     permissions:
       contents: read
       packages: write
-      
+    
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v1
+        with:
+          fetch-depth: 0
+          
       - name: Helm Deploy Kubernetes
         id: helm-dev
         uses: koslib/helm-eks-action@master
