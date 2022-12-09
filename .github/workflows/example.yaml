@@ -1,0 +1,61 @@
+name: Dev Build & Deploy
+on:
+  push:
+    branches:
+      - dev
+    paths-ignore:
+      - "version.txt"
+jobs:
+  verify:
+    name: Verify changed file values.yaml
+    runs-on: Linux
+    outputs:
+      op: ${{ steps.file_changes.outputs.files_modified }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v1
+        with:
+          fetch-depth: 0
+      - name: Verify
+        uses: trilom/file-changes-action@v1.2.3
+        id: file_changes
+        with:
+          githubToken: ${{ secrets.TOKEN }}
+      - name: test
+        run: |
+          echo '${{ steps.file_changes.outputs.files_modified}}'
+
+             
+  build-and-deploy:
+    needs: verify
+    #if: needs.verify.outputs.op != 'values-dev.yaml'
+    if: "!contains(needs.verify.outputs.op, 'values-dev.yaml')"
+    uses: olli-ai/workflows-cicd/.github/workflows/build-and-deploy.yml@dev
+    with:
+      imageName: "fct-device-log-viettel" 
+      appName: "fct-device-log-viettel" 
+      approvers: HoaNM98,sonlm
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_SECRET: ${{ secrets.DOCKER_SECRET }}
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+      TOKEN: ${{ secrets.TOKEN }}
+      
+  deploy-no-build:
+    #needs: [verify,build-and-deploy]
+    needs: [verify]
+    #if: needs.verify.outputs.op == 'values-dev.yaml'
+    if: contains(needs.verify.outputs.op, 'values-dev.yaml')
+    uses: olli-ai/workflows-cicd/.github/workflows/deploy-no-build.yml@dev
+    with:
+      imageName: "fct-device-log-viettel" 
+      appName: "fct-device-log-viettel" 
+      approvers: HoaNM98,sonlm
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_SECRET: ${{ secrets.DOCKER_SECRET }}
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+      TOKEN: ${{ secrets.TOKEN }}
+    
