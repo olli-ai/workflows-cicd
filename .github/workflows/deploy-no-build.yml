@@ -55,12 +55,13 @@ jobs:
         uses: koslib/helm-eks-action@master
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
-          TAG: ${{steps.version.outputs.version}}
+          #TAG: ${{steps.version.outputs.version}}
         with:
           command: |
+            TAG=$(cat version.txt)
             helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
             helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service -i -f values-dev.yaml
+            helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service -i -f values-dev.yaml --set image.tag=${{TAG}}
             
       - name: Slack Notification Success
         if: ${{ success() }}
