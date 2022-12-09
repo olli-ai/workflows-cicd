@@ -67,10 +67,16 @@ jobs:
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
-          sed -i 's/xxx/${{env.TAG}}/g' values-dev.yaml
+          # sed -i 's/xxx/${{env.TAG}}/g' values-dev.yaml
           docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+  
+      - name: Save Tag Image
+        env:
+          TAG: ${{steps.version.outputs.version}}
+        run: |
+          echo "${{env.TAG}}" > version.txt
           
       - name: Commit & Push changes
         uses: actions-js/push@master
