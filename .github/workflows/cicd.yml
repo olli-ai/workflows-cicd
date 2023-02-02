@@ -82,7 +82,7 @@ jobs:
           command: |
             helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
             helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service -i -f values-dev.yaml --wait --set image.tag=${{env.TAG}} --timeout 10m0s
+            helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service -i -f values-dev.yaml --wait --set image.tag=${{env.TAG}} --timeout 10m0s
             
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -152,7 +152,7 @@ jobs:
           command: |
             helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
             helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service --install --wait -f values-stg.yaml --set image.tag=${{env.TAG}} --atomic --timeout 10m0s
+            helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-stg.yaml --set image.tag=${{env.TAG}} --atomic --timeout 10m0s
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -222,7 +222,7 @@ jobs:
           command: |
             helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
             helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service --install --wait -f values-uat.yaml --set image.tag=${{env.TAG}} --atomic --timeout 10m0s
+            helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-uat.yaml --set image.tag=${{env.TAG}} --atomic --timeout 10m0s
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -274,7 +274,7 @@ jobs:
           command: |
             helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
             helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service --install --wait -f values-prod.yaml --set image.tag=${{env.TAG}} --atomic --timeout 10m0s
+            helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-prod.yaml --set image.tag=${{env.TAG}} --atomic --timeout 10m0s
             
       - name: Slack Notification Success
         if: ${{ success() }}
