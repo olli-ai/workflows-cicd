@@ -218,8 +218,8 @@ jobs:
       
       - name: Helm Deploy Service on UAT
         id: helm-uat
-        #uses: koslib/helm-eks-action@master
-        uses: olli-ai/helm-k8s-action@master
+        uses: koslib/helm-eks-action@master
+        #uses: olli-ai/helm-k8s-action@master
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
           TAG: ${{steps.version.outputs.version}}
@@ -271,8 +271,8 @@ jobs:
 
       - name: Helm Deploy Service on Production
         id: helm-prod
-        #uses: koslib/helm-eks-action@master
-        uses: olli-ai/helm-k8s-action@master
+        uses: koslib/helm-eks-action@master
+        #uses: olli-ai/helm-k8s-action@master
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
           TAG: ${{steps.version.outputs.version}}
