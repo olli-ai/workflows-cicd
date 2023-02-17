@@ -1,0 +1,58 @@
+tagImage: "xxx"
+deployments:
+  - serviceName: "news-grpc-viettel"
+    replicaCount: 1
+    maxSurge: 1
+    maxUnavailable: 0
+    podAnnotations: {}
+    imagePullSecrets:
+      - name: regcred
+    serviceAccount: {}
+    podSecurityContext: {}
+    securityContext: {}
+    repository: harbor.jenkins-x-viettel.iviet.com/stg/news-grpc-viettel
+    pullPolicy: IfNotPresent
+    #tag: "1a2b3c" -> If you have specific tag then add this, else remove
+    containerCommand: ""
+    containerArgs: ""
+    ports:
+    - containerPort: 50052
+      name: "http"
+    resources: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+services:
+  - serviceName: "news-grpc-viettel"
+    type: ClusterIP
+    ports:
+      - name: new-svc
+        port: 80
+        protocol: TCP
+        targetPort: 50052
+ingresses:
+  - serviceName: "news-grpc-viettel"
+    annotations:
+      cert-manager.io/cluster-issuer: controller-letsencrypt-prod
+      kubernetes.io/tls-acme: "true"
+    ingressClassName: controller-internal
+    rules:
+    - host: new-staging.development.iviet.com
+      http:
+        paths:
+        - backend:
+            service:
+              name: new-svc
+              port:
+                number: 80
+          path: /
+          pathType: ImplementationSpecific
+    tls:
+    - hosts:
+        - new-staging.development.iviet.com
+      secretName: tls-new-stg
+autoscales:
+  - serviceName: "news-grpc-viettel"
+    type: cpu
+    threshold: 80
