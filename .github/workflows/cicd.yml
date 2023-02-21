@@ -74,7 +74,8 @@ jobs:
           
       - name: Helm Deploy Kubernetes
         id: helm-dev
-        uses: koslib/helm-eks-action@master
+        #uses: koslib/helm-eks-action@master
+        uses: olli-ai/helm-k8s-action@master
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
           TAG: ${{steps.version.outputs.version}}
@@ -86,7 +87,8 @@ jobs:
             
       - name: Slack Notification Success
         if: ${{ success() }}
-        uses: rtCamp/action-slack-notify@v2
+        #uses: rtCamp/action-slack-notify@v2
+        uses: olli-ai/slack-notify-action@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -98,7 +100,8 @@ jobs:
     
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-dev.conclusion == 'failure' }}
-        uses: rtCamp/action-slack-notify@v2
+        #uses: rtCamp/action-slack-notify@v2
+        uses: olli-ai/slack-notify-action@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -144,7 +147,8 @@ jobs:
       
       - name: Helm Deploy Service on Staging
         id: helm-stg
-        uses: koslib/helm-eks-action@master
+        #uses: koslib/helm-eks-action@master
+        uses: olli-ai/helm-k8s-action@master
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
           TAG: ${{steps.version.outputs.version}}
@@ -156,7 +160,8 @@ jobs:
 
       - name: Slack Notification Success
         if: ${{ success() }}
-        uses: rtCamp/action-slack-notify@v2
+        #uses: rtCamp/action-slack-notify@v2
+        uses: olli-ai/slack-notify-action@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -168,7 +173,8 @@ jobs:
     
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-stg.conclusion == 'failure' }}
-        uses: rtCamp/action-slack-notify@v2
+        #uses: rtCamp/action-slack-notify@v2
+        uses: olli-ai/slack-notify-action@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -227,7 +233,8 @@ jobs:
 
       - name: Slack Notification Success
         if: ${{ success() }}
-        uses: rtCamp/action-slack-notify@v2
+        #uses: rtCamp/action-slack-notify@v2
+        uses: olli-ai/slack-notify-action@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -239,7 +246,8 @@ jobs:
     
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-uat.conclusion == 'failure' }}
-        uses: rtCamp/action-slack-notify@v2
+        #uses: rtCamp/action-slack-notify@v2
+        uses: olli-ai/slack-notify-action@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -267,7 +275,8 @@ jobs:
 
       - name: Helm Deploy Service on Production
         id: helm-prod
-        uses: koslib/helm-eks-action@master
+        #uses: koslib/helm-eks-action@master
+        uses: olli-ai/helm-k8s-action@master
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
           TAG: ${{steps.version.outputs.version}}
@@ -279,7 +288,8 @@ jobs:
             
       - name: Slack Notification Success
         if: ${{ success() }}
-        uses: rtCamp/action-slack-notify@v2
+        #uses: rtCamp/action-slack-notify@v2
+        uses: olli-ai/slack-notify-action@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -291,7 +301,8 @@ jobs:
     
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-prod.conclusion == 'failure' }}
-        uses: rtCamp/action-slack-notify@v2
+        #uses: rtCamp/action-slack-notify@v2
+        uses: olli-ai/slack-notify-action@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
