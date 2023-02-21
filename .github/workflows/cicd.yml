@@ -258,7 +258,8 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           
       - name: Trigger Deploy Service to Production
-        uses: trstringer/manual-approval@v1
+        #uses: trstringer/manual-approval@v1
+        uses: olli-ai/manual-approval-action@master
         timeout-minutes: 1
         with:
           secret: ${{ secrets.TOKEN }}
