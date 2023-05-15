@@ -141,7 +141,7 @@ jobs:
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
-          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
+          DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
       
@@ -214,7 +214,7 @@ jobs:
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
-          docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
+          DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
       
