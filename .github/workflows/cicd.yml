@@ -30,7 +30,7 @@ jobs:
         with:
           node-version: 18
       - run: npm install
-      - run: vite build --mode dev
+      - run: npm run build-dev
 
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
