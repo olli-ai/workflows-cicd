@@ -9,7 +9,9 @@ on:
         required: true
       SLACK_WEBHOOK:
         required: true
-
+env:
+  APP_NAME: ${{ inputs.appName }}
+  
 jobs:
   DEV:
     if: github.ref == 'refs/heads/dev'
