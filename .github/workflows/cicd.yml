@@ -70,7 +70,7 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           
   STAGING:
-    if: github.ref == 'refs/heads/dev'
+    if: github.ref == 'refs/heads/master'
     runs-on: Linux 
     permissions:
       contents: read
