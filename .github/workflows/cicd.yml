@@ -290,6 +290,11 @@ jobs:
       packages: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v1
+        with:
+          fetch-depth: 0
+          
       - id: 'auth'
         uses: 'google-github-actions/auth@v1'
         with:
@@ -313,6 +318,7 @@ jobs:
 #             helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
 #             helm repo update
 #             helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-prod.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+      
       - name: Helm Deploy Service on Production
         id: 'helm-prod'
         env:
