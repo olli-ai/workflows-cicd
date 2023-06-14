@@ -28,7 +28,7 @@ env:
   ENV_DEV: dev
   ENV_STG: stg 
   ENV_PRE-PROD: uat
-  ENV_PROD: prod
+  ENV_PROD: gke-cluster
   # CD
   RELEASE_NAME: "chart-k8s"
   APP_NAME: ${{ inputs.appName }}
@@ -187,10 +187,9 @@ jobs:
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           
-  PRODUCTION:
+  UAT:
     if: github.ref == 'refs/heads/pre-production'
     runs-on: Linux 
-    #runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -278,13 +277,23 @@ jobs:
           docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
+  PRODUCTION:
+    needs: UAT
+    #if: github.ref == 'refs/heads/pre-production'
+    runs-on:
+      group: gke-cluster
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
       - name: Helm Deploy Service on Production
         id: helm-prod
-        #uses: koslib/helm-eks-action@master
-        uses: olli-ai/helm-k8s-action@master
+        uses: koslib/helm-eks-action@master
+        #uses: olli-ai/helm-k8s-action@master
         env:
-          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
-          TAG: ${{steps.version.outputs.version}}
+          KUBE_CONFIG_DATA: ${{ secrets.GKE_KUBE_CONFIG_DATA }}
+          TAG: ${{needs.UAT.steps.version.outputs.version}}
         with:
           command: |
             helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
@@ -293,8 +302,8 @@ jobs:
             
       - name: Slack Notification Success
         if: ${{ success() }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
+        uses: rtCamp/action-slack-notify@v2
+        #uses: olli-ai/slack-notify-action@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -306,8 +315,8 @@ jobs:
     
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-prod.conclusion == 'failure' }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
+        uses: rtCamp/action-slack-notify@v2
+        #uses: olli-ai/slack-notify-action@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
