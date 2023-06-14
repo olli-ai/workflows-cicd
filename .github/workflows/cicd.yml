@@ -21,6 +21,8 @@ on:
         required: true
       GKE_KUBE_CONFIG_DATA:
         required: true
+      GCP_CREDENTIALS:
+        required: true
       TOKEN:
         required: true
 env:
@@ -290,6 +292,17 @@ jobs:
       packages: write
 
     steps:
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - id: 'get-credentials'
+        uses: 'google-github-actions/get-gke-credentials@v1'
+        with:
+          cluster_name: 'olli-iviet-gke'
+          location: 'asia-southeast1-b'
+          
       - name: Helm Deploy Service on Production
         id: helm-prod
         uses: koslib/helm-eks-action@master
