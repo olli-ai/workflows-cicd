@@ -19,6 +19,8 @@ on:
         required: true
       KUBE_CONFIG_DATA:
         required: true
+      GKE_KUBE_CONFIG_DATA:
+        required: true
       TOKEN:
         required: true
 env:
