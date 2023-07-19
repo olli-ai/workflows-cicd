@@ -117,8 +117,8 @@ jobs:
      
   STAGING:
     if: github.ref == 'refs/heads/master'
-    runs-on: Linux 
-    #runs-on: ubuntu-latest
+    runs-on:
+      group: gke-cluster
     permissions:
       contents: read
       packages: write
@@ -202,7 +202,8 @@ jobs:
           
   UAT:
     if: github.ref == 'refs/heads/pre-production'
-    runs-on: Linux 
+    runs-on:
+      group: gke-cluster
     permissions:
       contents: read
       packages: write
