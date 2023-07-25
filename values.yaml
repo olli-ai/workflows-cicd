@@ -34,11 +34,11 @@ services:
 ingresses:
   - serviceName: "news-grpc-viettel"
     annotations:
-      cert-manager.io/cluster-issuer: controller-letsencrypt-prod
+      cert-manager.io/cluster-issuer: gke-letsencrypt-prod
       kubernetes.io/tls-acme: "true"
-    ingressClassName: controller-internal
+    ingressClassName: nginx
     rules:
-    - host: new-staging.development.iviet.com
+    - host: new-service.gke-cluster.maika.ai # can change domain
       http:
         paths:
         - backend:
@@ -50,8 +50,8 @@ ingresses:
           pathType: ImplementationSpecific
     tls:
     - hosts:
-        - new-staging.development.iviet.com
-      secretName: tls-new-stg
+        - new-service.gke-cluster.maika.ai
+      secretName: tls-new-service
 autoscales:
   - serviceName: "news-grpc-viettel"
     type: cpu
