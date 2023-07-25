@@ -30,7 +30,7 @@ env:
   ENV_DEV: dev
   ENV_STG: stg 
   ENV_PRE-PROD: uat
-  ENV_PROD: gke-cluster
+  ENV_PROD: prod
   # CD
   RELEASE_NAME: "chart-k8s"
   APP_NAME: ${{ inputs.appName }}
@@ -245,7 +245,7 @@ jobs:
           cluster_name: 'olli-iviet-gke'
           location: 'asia-southeast1-b'
           
-      - name: Helm Deploy Service on Staging
+      - name: Helm Deploy Service on UAT
         id: 'helm-uat'
         env:
           TAG: ${{steps.version.outputs.version}}
