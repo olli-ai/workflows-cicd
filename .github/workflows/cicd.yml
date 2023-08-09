@@ -126,6 +126,62 @@ jobs:
           SLACK_TITLE: 'Status Deploy Service Staging: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+  UAT:
+    if: github.ref == 'refs/heads/uat'
+    runs-on: Linux 
+    #runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - run: npm install
+      - run: npm run build-uat
+
+      - name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+      
+      - name: "Upload Source to Google Cloud"     
+        id: 'upload-folder'
+        uses: 'google-github-actions/upload-cloud-storage@v1'
+        with:
+          path: 'dist'
+          destination: 'maika-ai-fe-uat'
+          parent: false
+
+      - name: Slack Notification Success
+        if: ${{ success() }}
+        uses: olli-ai/slack-notify-action@master
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }} 
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':bell: FINISHED'
+          SLACK_TITLE: 'Status Deploy Service UAT: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+    
+      - name: Slack Notification Failed
+        if: ${{ failure() && steps.upload-folder.conclusion == 'failure' }}
+        uses: olli-ai/slack-notify-action@master
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }}
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':x: ERROR'
+          SLACK_TITLE: 'Status Deploy Service UAT: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
   PRODUCTION:
     if: github.ref == 'refs/heads/production'
     runs-on: Linux 
