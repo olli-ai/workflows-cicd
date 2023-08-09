@@ -42,7 +42,7 @@ env:
 jobs:
   DEV:
     if: github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
+    runs-on: gke-cluster
     permissions:
       contents: read
       packages: write
@@ -75,6 +75,17 @@ jobs:
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - id: 'get-credentials'
+        uses: 'google-github-actions/get-gke-credentials@v1'
+        with:
+          cluster_name: 'olli-iviet-gke'
+          location: 'asia-southeast1-b'
+          
       - name: Helm Deploy Kubernetes
         id: helm-dev
         #uses: koslib/helm-eks-action@master
@@ -84,6 +95,9 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         with:
           command: |
+            curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+            chmod 700 get_helm.sh
+            bash get_helm.sh
             helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
             helm repo update
             helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service -i -f values-dev.yaml --wait --set tagImage=${{env.TAG}} --timeout 10m0s
