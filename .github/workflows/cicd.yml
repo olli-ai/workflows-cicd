@@ -42,7 +42,7 @@ env:
 jobs:
   DEV:
     if: github.ref == 'refs/heads/dev'
-    runs-on: gke-cluster
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -83,7 +83,7 @@ jobs:
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
         with:
-          cluster_name: 'olli-iviet-gke'
+          cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1-b'
           
       - name: Helm Deploy Kubernetes
@@ -130,8 +130,7 @@ jobs:
      
   STAGING:
     if: github.ref == 'refs/heads/master'
-    runs-on:
-      group: gke-cluster
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -171,7 +170,7 @@ jobs:
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
         with:
-          cluster_name: 'olli-iviet-gke'
+          cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1-b'
           
       - name: Helm Deploy Service on Staging
@@ -215,8 +214,7 @@ jobs:
           
   UAT:
     if: github.ref == 'refs/heads/pre-production'
-    runs-on:
-      group: gke-cluster
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -256,7 +254,7 @@ jobs:
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
         with:
-          cluster_name: 'olli-iviet-gke'
+          cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1-b'
           
       - name: Helm Deploy Service on UAT
@@ -318,8 +316,7 @@ jobs:
       
   PRODUCTION:
     needs: UAT
-    runs-on:
-      group: gke-cluster
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -338,7 +335,7 @@ jobs:
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
         with:
-          cluster_name: 'olli-iviet-gke'
+          cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1-b'
           
       - name: Helm Deploy Service on Production
