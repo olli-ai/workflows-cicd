@@ -345,8 +345,8 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
       
       - id: 'auth'
         uses: 'google-github-actions/auth@v1'
