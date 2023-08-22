@@ -304,13 +304,15 @@ jobs:
       #     approvers: ${{ inputs.approvers }}
       #     minimum-approvals: 1
       
-      # - name: Change Tag Image Production
-      #   env:        
-      #     TAG: ${{steps.version.outputs.version}}
-      #   run: |
-      #     docker pull ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-      #     docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-      #     docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+      - name: Change Tag Image Production
+        env:        
+          TAG: ${{steps.version.outputs.version}}
+        run: |
+          docker pull ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} 
+          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
+          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
     # outputs:
     #   output1: ${{ steps.version.outputs.version }}
       
@@ -334,20 +336,12 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_SECRET }}
 
-      - name: Generate Tag Version
-        id: version
-        uses: paulhatch/semantic-version@v4.0.2
-        with:
-          bump_each_commit: true
-
-      - name: Build & Tag & Push Docker image
-        env:
-          TAG: ${{steps.version.outputs.version}}
+      - name: Get latest image
+        env:        
+          TAG: latest
         run: |
-          DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-      
+          docker pull ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+
       - id: 'auth'
         uses: 'google-github-actions/auth@v1'
         with:
@@ -362,7 +356,7 @@ jobs:
       - name: Helm Deploy Service on Production
         id: 'helm-prod'
         env:
-          TAG: ${{steps.version.outputs.version}}
+          TAG: latest
         run: |
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
