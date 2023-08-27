@@ -338,8 +338,8 @@ jobs:
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
         with:
-          cluster_name: 'olli-iviet-gke'
-          location: 'asia-southeast1-b'
+          cluster_name: 'olli-maika-ai'
+          location: 'asia-southeast1'
           
       - name: Helm Deploy Service on Production
         id: 'helm-prod'
