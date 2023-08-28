@@ -25,7 +25,8 @@ on:
         required: true
 env:
   # CI
-  REGISTRY: harbor.jenkins-x-viettel.iviet.com
+  REGISTRY: asia-southeast1-docker.pkg.dev
+  PROJECT_NAME: olli-iviet
   IMAGE_NAME: ${{ inputs.imageName }}
   ENV_DEV: dev
   ENV_STG: stg 
@@ -53,12 +54,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
       - name: Log in to the Container registry
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_SECRET }}
+          username: _json_key
+          password: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Generate Tag Version
         id: version
@@ -71,13 +77,8 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-      
-      - id: 'auth'
-        uses: 'google-github-actions/auth@v1'
-        with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
@@ -93,8 +94,7 @@ jobs:
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
-          helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
-          helm repo update
+          helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
           helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-dev.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
             
       - name: Slack Notification Success
