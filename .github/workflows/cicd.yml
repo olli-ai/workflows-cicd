@@ -86,7 +86,7 @@ jobs:
           cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1'
           
-      - name: Helm Deploy Service on DEV
+      - name: Helm Deploy Service on  ${{env.ENV_DEV}}
         id: 'helm-dev'
         env:
           TAG: ${{steps.version.outputs.version}}
@@ -106,7 +106,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy Service Dev: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
     
@@ -119,7 +119,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy Service Dev: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
      
@@ -136,12 +136,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
       - name: Log in to the Container registry
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_SECRET }}
+          username: _json_key
+          password: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Generate Tag Version
         id: version
@@ -154,13 +159,8 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-      
-      - id: 'auth'
-        uses: 'google-github-actions/auth@v1'
-        with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
@@ -168,7 +168,7 @@ jobs:
           cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1'
           
-      - name: Helm Deploy Service on Staging
+      - name: Helm Deploy Service on ${{env.ENV_STG}}
         id: 'helm-stg'
         env:
           TAG: ${{steps.version.outputs.version}}
@@ -176,11 +176,9 @@ jobs:
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
-          helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
-          helm repo update
-          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-stg.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
-          
-
+          helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
+          helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-stg.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+            
       - name: Slack Notification Success
         if: ${{ success() }}
         #uses: rtCamp/action-slack-notify@v2
@@ -190,7 +188,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy Service Staging: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
     
@@ -203,7 +201,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy Service Staging: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           
@@ -220,12 +218,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
       - name: Log in to the Container registry
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_SECRET }}
+          username: _json_key
+          password: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Generate Tag Version
         id: version
@@ -238,13 +241,8 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-      
-      - id: 'auth'
-        uses: 'google-github-actions/auth@v1'
-        with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
@@ -252,7 +250,7 @@ jobs:
           cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1'
           
-      - name: Helm Deploy Service on UAT
+      - name: Helm Deploy Service on ${{env.ENV_PRE-PROD}}
         id: 'helm-uat'
         env:
           TAG: ${{steps.version.outputs.version}}
@@ -260,10 +258,9 @@ jobs:
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
-          helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
-          helm repo update
-          helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-uat.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
-
+          helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
+          helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-uat.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+            
       - name: Slack Notification Success
         if: ${{ success() }}
         #uses: rtCamp/action-slack-notify@v2
@@ -273,7 +270,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy Service UAT: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_PRE-PROD }}: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
     
@@ -286,10 +283,10 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy Service UAT: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_PRE-PROD }}: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          
+                    
       # - name: Trigger Deploy Service to Production
       #   #uses: trstringer/manual-approval@v1
       #   uses: olli-ai/manual-approval-action@master
@@ -303,11 +300,11 @@ jobs:
         env:        
           TAG: ${{steps.version.outputs.version}}
         run: |
-          docker pull ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} 
-          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
-          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
+          docker pull ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} 
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
     # outputs:
     #   output1: ${{ steps.version.outputs.version }}
       
@@ -324,23 +321,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
       - name: Log in to the Container registry
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_SECRET }}
+          username: _json_key
+          password: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Get latest image
         env:        
           TAG: latest
         run: |
-          docker pull ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-
-      - id: 'auth'
-        uses: 'google-github-actions/auth@v1'
-        with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          docker pull ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
@@ -356,9 +353,8 @@ jobs:
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
-          helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
-          helm repo update
-          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-prod.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+          helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
+          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-prod.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
 
       - name: Slack Notification Success
         if: ${{ success() }}
