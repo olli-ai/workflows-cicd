@@ -113,7 +113,7 @@ jobs:
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-dev.conclusion == 'failure' }}
         #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
+        uses: olli-ai/slack-notify-action-gke@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -182,7 +182,7 @@ jobs:
       - name: Slack Notification Success
         if: ${{ success() }}
         #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
+        uses: olli-ai/slack-notify-action-gke@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -195,7 +195,7 @@ jobs:
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-stg.conclusion == 'failure' }}
         #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
+        uses: olli-ai/slack-notify-action-gke@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -264,7 +264,7 @@ jobs:
       - name: Slack Notification Success
         if: ${{ success() }}
         #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
+        uses: olli-ai/slack-notify-action-gke@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -277,7 +277,7 @@ jobs:
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-uat.conclusion == 'failure' }}
         #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
+        uses: olli-ai/slack-notify-action-gke@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -359,7 +359,7 @@ jobs:
       - name: Slack Notification Success
         if: ${{ success() }}
         #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
+        uses: olli-ai/slack-notify-action-gke@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
@@ -372,7 +372,7 @@ jobs:
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-prod.conclusion == 'failure' }}
         #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
+        uses: olli-ai/slack-notify-action-gke@master
         env:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
