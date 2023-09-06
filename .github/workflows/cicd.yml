@@ -86,7 +86,7 @@ jobs:
           cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1'
           
-      - name: Helm Deploy Service on  ${{env.ENV_DEV}}
+      - name: Helm Deploy Service on dev
         id: 'helm-dev'
         env:
           TAG: ${{steps.version.outputs.version}}
@@ -168,7 +168,7 @@ jobs:
           cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1'
           
-      - name: Helm Deploy Service on ${{env.ENV_STG}}
+      - name: Helm Deploy Service on staging
         id: 'helm-stg'
         env:
           TAG: ${{steps.version.outputs.version}}
@@ -250,7 +250,7 @@ jobs:
           cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1'
           
-      - name: Helm Deploy Service on ${{env.ENV_PRE-PROD}}
+      - name: Helm Deploy Service on uat
         id: 'helm-uat'
         env:
           TAG: ${{steps.version.outputs.version}}
