@@ -337,7 +337,8 @@ jobs:
         env:        
           TAG: latest
         run: |
-          docker pull ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}
+          docker image rm ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} || true
+          docker pull ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
