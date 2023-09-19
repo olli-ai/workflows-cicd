@@ -337,6 +337,7 @@ jobs:
         env:        
           TAG: latest
         run: |
+          docker image rm ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} || true
           docker pull ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
       - id: 'get-credentials'
