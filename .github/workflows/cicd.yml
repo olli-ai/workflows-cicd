@@ -341,9 +341,12 @@ jobs:
 
       - name: Get latest image
         env:        
-          TAG: ${{steps.version.outputs.version}}
+          TAG: latest
+          NEW_TAG: ${{steps.version.outputs.version}}
         run: |
           docker pull ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.NEW_TAG}}
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.NEW_TAG}}
 
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
