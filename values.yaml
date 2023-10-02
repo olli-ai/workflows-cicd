@@ -53,6 +53,15 @@
 #         - new-service.gke-cluster.maika.ai
 #       secretName: tls-new-service
 # autoscales:
-#   - serviceName: "news-grpc-viettel"
-#     type: cpu
-#     threshold: 80
+#   - serviceName: ""
+#     triggers:
+#     - type: cpu
+#       metadata:
+#         value: "80"
+#       metricType: Utilization
+#     - type: memory
+#       metadata:
+#         value: "80"
+#       metricType: Utilization
+#     minReplica: 1
+#     maxReplica: 5
