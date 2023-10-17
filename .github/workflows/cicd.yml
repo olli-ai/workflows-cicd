@@ -127,7 +127,7 @@ jobs:
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
   UAT:
-    if: github.ref == 'refs/heads/uat'
+    if: github.ref == 'refs/heads/pre-production'
     runs-on: Linux 
     #runs-on: ubuntu-latest
     permissions:
