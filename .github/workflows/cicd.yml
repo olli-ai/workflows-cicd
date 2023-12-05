@@ -83,7 +83,7 @@ jobs:
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
         with:
-          cluster_name: 'olli-ai'
+          cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1'
           
       - name: Helm Deploy Service on dev
@@ -247,7 +247,7 @@ jobs:
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
         with:
-          cluster_name: 'olli-ai'
+          cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1'
           
       - name: Helm Deploy Service on uat
@@ -351,7 +351,7 @@ jobs:
       - id: 'get-credentials'
         uses: 'google-github-actions/get-gke-credentials@v1'
         with:
-          cluster_name: 'olli-ai'
+          cluster_name: 'olli-maika-ai'
           location: 'asia-southeast1'
           
       - name: Helm Deploy Service on Production
