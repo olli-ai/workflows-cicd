@@ -50,8 +50,12 @@ jobs:
         uses: 'google-github-actions/upload-cloud-storage@v2'
         with:
           path: 'out/index.html'
-          destination: 'image-ai-frontend-dev/index.html'
-          parent: false
+          destination: 'image-ai-frontend-dev/'
+
+      - name: "Invalidation cache"
+        run: |
+          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host dev.app.maika.ai --path "/ai-images" --async
+          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host dev.app.maika.ai --path "/ai-images/*" --async
 
       - name: Slack Notification Success
         if: ${{ success() }}
