@@ -56,8 +56,7 @@ jobs:
 
       - name: "Invalidation cache"
         run: |
-          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host dev.app.maika.ai --path "/ai-images" --async
-          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host dev.app.maika.ai --path "/ai-images/*" --async
+          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host dev.app.maika.ai --path "/*" --async
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -126,8 +125,7 @@ jobs:
 
       - name: "Invalidation cache"
         run: |
-          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host staging.app.maika.ai --path "/ai-images" --async
-          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host staging.app.maika.ai --path "/ai-images/*" --async
+          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host staging.app.maika.ai --path "/*" --async
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -195,8 +193,7 @@ jobs:
 
       - name: "Invalidation cache"
         run: |
-          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host uat.app.maika.ai --path "/ai-images" --async
-          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host uat.app.maika.ai --path "/ai-images/*" --async
+          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host uat.app.maika.ai --path "/*" --async
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -264,9 +261,7 @@ jobs:
 
       - name: "Invalidation cache"
         run: |
-          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host app.maika.ai --path "/ai-images" --async
-          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host app.maika.ai --path "/ai-images/*" --async
-
+          gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host app.maika.ai --path "/*" --async
 
       - name: Slack Notification Success
         if: ${{ success() }}
