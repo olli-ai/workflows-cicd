@@ -23,7 +23,8 @@ on:
         required: true
 env:
   # CI
-  REGISTRY: harbor.jenkins-x-viettel.iviet.com
+  REGISTRY: asia-southeast1-docker.pkg.dev
+  PROJECT_NAME: olli-iviet
   IMAGE_NAME: ${{ inputs.imageName }}
   ENV_DEV: dev
   ENV_STG: stg 
@@ -48,17 +49,21 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
       - name: Log in to the Container registry
-        #uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_SECRET }}
+          username: _json_key
+          password: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Generate Tag Version
         id: version
@@ -71,8 +76,8 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           
       - name: Helm Deploy Kubernetes
         id: helm-dev
@@ -123,16 +128,21 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
 
       - name: Log in to the Container registry
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_SECRET }}
+          username: _json_key
+          password: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Generate Tag Version
         id: version
@@ -145,8 +155,8 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
       
       - name: Helm Deploy Service on Staging
         id: helm-stg
@@ -197,16 +207,21 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
 
       - name: Log in to the Container registry
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_SECRET }}
+          username: _json_key
+          password: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Generate Tag Version
         id: version
@@ -219,8 +234,8 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
       
       - name: Helm Deploy Service on UAT
         id: helm-uat
@@ -274,9 +289,9 @@ jobs:
         env:        
           TAG: ${{steps.version.outputs.version}}
         run: |
-          docker pull ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker pull ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
       - name: Helm Deploy Service on Production
         id: helm-prod
