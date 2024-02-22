@@ -223,6 +223,7 @@ jobs:
           username: _json_key
           password: ${{ secrets.GCP_CREDENTIALS }}
 
+
       - name: Generate Tag Version
         id: version
         uses: paulhatch/semantic-version@v4.0.2
