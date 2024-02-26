@@ -25,6 +25,8 @@ on:
         required: true
       GIT_PASSWORD:
         required: true
+      GCP_CREDENTIALS:
+        true
 env:
   # CI
   REGISTRY: asia-southeast1-docker.pkg.dev/olli-iviet
