@@ -11,6 +11,10 @@ on:
         required: true
         type: string
     secrets:
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_SECRET:
+        required: true
       GCP_CREDENTIALS:
         required: true
       SLACK_WEBHOOK:
