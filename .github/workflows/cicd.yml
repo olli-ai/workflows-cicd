@@ -335,4 +335,3 @@ jobs:
           SLACK_TITLE: 'Status Deploy Service Production: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }} 
-P
