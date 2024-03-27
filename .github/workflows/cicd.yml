@@ -43,7 +43,7 @@ env:
 jobs:
   DEV:
     if: github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
+    runs-on: large-runner
     permissions:
       contents: read
       packages: write
@@ -125,7 +125,7 @@ jobs:
      
   STAGING:
     if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
+    runs-on: large-runner
     permissions:
       contents: read
       packages: write
@@ -207,7 +207,7 @@ jobs:
           
   UAT:
     if: github.ref == 'refs/heads/pre-production'
-    runs-on: ubuntu-latest
+    runs-on: large-runner
     permissions:
       contents: read
       packages: write
@@ -310,7 +310,7 @@ jobs:
       
   PRODUCTION:
     if: github.ref == 'refs/heads/production'
-    runs-on: ubuntu-latest
+    runs-on: large-runner
     permissions:
       contents: read
       packages: write
