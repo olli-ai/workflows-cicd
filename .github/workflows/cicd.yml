@@ -96,7 +96,7 @@ jobs:
             bash get_helm.sh
             helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
             helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service -i -f values-dev.yaml --wait --set tagImage=${{env.TAG}} --timeout 10m0s
+            helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-dev.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
             
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -177,7 +177,7 @@ jobs:
             chmod 700 get_helm.sh
             bash get_helm.sh
             helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
-            helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-stg.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+            helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-stg.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -260,7 +260,7 @@ jobs:
             bash get_helm.sh
             helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
             helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-uat.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+            helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-uat.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -318,7 +318,7 @@ jobs:
             chmod 700 get_helm.sh
             bash get_helm.sh
             helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
-            helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/all-service --install --wait -f values-prod.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+            helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-prod.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
             
       - name: Slack Notification Success
         if: ${{ success() }}
