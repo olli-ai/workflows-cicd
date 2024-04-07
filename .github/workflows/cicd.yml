@@ -72,12 +72,12 @@ jobs:
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
-      - name: "Public endpoint"
       - name: "Deploy new image"
         run: |
           sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_DEV}}.yaml
           gcloud run services replace --region asia-southeast1 service-${{env.ENV_DEV}}.yaml
 
+      - name: "Public endpoint"
         run: |
           gcloud run services add-iam-policy-binding  ${{env.ENV_DEV}}-${{env.APP_NAME}} \
           --member="allUsers" \
