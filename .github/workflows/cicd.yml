@@ -11,38 +11,28 @@ on:
         required: true
         type: string
     secrets:
-      DOCKER_USERNAME:
-        required: true
-      DOCKER_SECRET:
-        required: true
       GCP_CREDENTIALS:
         required: true
       SLACK_WEBHOOK:
         required: true
-      KUBE_CONFIG_DATA:
-        required: true
       TOKEN:
         required: true
+
 env:
   # CI
   REGISTRY: asia-southeast1-docker.pkg.dev/olli-iviet
   IMAGE_NAME: ${{ inputs.imageName }}
   ENV_DEV: dev
-  ENV_STG: stg 
+  ENV_STG: stg
   ENV_PRE-PROD: uat
   ENV_PROD: prod
   # CD
-  RELEASE_NAME: "chart-k8s"
   APP_NAME: ${{ inputs.appName }}
-  NAMESPACE_DEV: "service-dev"
-  NAMESPACE_STG: "service-staging"
-  NAMESPACE_PRE-PROD: "service-uat"
-  NAMESPACE_PROD: "service-production"
 
 jobs:
   DEV:
     if: github.ref == 'refs/heads/dev'
-    runs-on: Linux 
+    runs-on: Linux
     #runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -74,20 +64,25 @@ jobs:
           docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          
-      - name: Helm Deploy Kubernetes
-        id: helm-dev
-        #uses: koslib/helm-eks-action@master
-        uses: olli-ai/helm-k8s-action@master
-        env:
-          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
-          TAG: ${{steps.version.outputs.version}}
+
+      - uses: 'google-github-actions/auth@v2'
         with:
-          command: |
-            helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
-            helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service -i -f values-dev.yaml --wait --set image.tag=${{env.TAG}} --timeout 10m0s
-            
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: "Public endpoint"
+        run: |
+          gcloud run services add-iam-policy-binding  ${{env.ENV_DEV}}-${{env.APP_NAME}} \
+          --member="allUsers" \
+          --role="roles/run.invoker"
+
+      - name: "Deploy new image"
+        run: |
+          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_DEV}}.yaml
+          gcloud run services replace --region asia-southeast1 service-${{env.ENV_DEV}}.yaml
+
       - name: Slack Notification Success
         if: ${{ success() }}
         #uses: rtCamp/action-slack-notify@v2
@@ -100,7 +95,7 @@ jobs:
           SLACK_TITLE: 'Status Deploy Service Dev: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
+
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-dev.conclusion == 'failure' }}
         #uses: rtCamp/action-slack-notify@v2
@@ -113,7 +108,7 @@ jobs:
           SLACK_TITLE: 'Status Deploy Service Dev: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-     
+
   STAGING:
     if: github.ref == 'refs/heads/master'
     runs-on: Linux 
@@ -148,19 +143,24 @@ jobs:
           docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-      
-      - name: Helm Deploy Service on Staging
-        id: helm-stg
-        #uses: koslib/helm-eks-action@master
-        uses: olli-ai/helm-k8s-action@master
-        env:
-          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
-          TAG: ${{steps.version.outputs.version}}
+
+      - uses: 'google-github-actions/auth@v2'
         with:
-          command: |
-            helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
-            helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service --install --wait -f values-stg.yaml --set image.tag=${{env.TAG}} --atomic --timeout 10m0s
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: "Public endpoint"
+        run: |
+          gcloud run services add-iam-policy-binding  ${{env.ENV_STG}}-${{env.APP_NAME}} \
+          --member="allUsers" \
+          --role="roles/run.invoker"
+
+      - name: "Deploy new image"
+        run: |
+          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_STG}}.yaml
+          gcloud run services replace --region asia-southeast1 service-${{env.ENV_STG}}.yaml
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -174,7 +174,7 @@ jobs:
           SLACK_TITLE: 'Status Deploy Service Staging: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
+
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-stg.conclusion == 'failure' }}
         #uses: rtCamp/action-slack-notify@v2
@@ -187,10 +187,10 @@ jobs:
           SLACK_TITLE: 'Status Deploy Service Staging: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          
+
   PRODUCTION:
     if: github.ref == 'refs/heads/pre-production'
-    runs-on: Linux 
+    runs-on: Linux
     permissions:
       contents: read
       packages: write
@@ -221,19 +221,24 @@ jobs:
           docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-      
-      - name: Helm Deploy Service on UAT
-        id: helm-uat
-        #uses: koslib/helm-eks-action@master
-        uses: olli-ai/helm-k8s-action@master
-        env:
-          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
-          TAG: ${{steps.version.outputs.version}}
+
+      - uses: 'google-github-actions/auth@v2'
         with:
-          command: |
-            helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
-            helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service --install --wait -f values-uat.yaml --set image.tag=${{env.TAG}} --atomic --timeout 10m0s
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: "Public endpoint"
+        run: |
+          gcloud run services add-iam-policy-binding  ${{env.ENV_PRE-PROD}}-${{env.APP_NAME}} \
+          --member="allUsers" \
+          --role="roles/run.invoker"
+
+      - name: "Deploy new image"
+        run: |
+          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_PRE-PROD}}.yaml
+          gcloud run services replace --region asia-southeast1 service-${{env.ENV_PRE-PROD}}.yaml
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -247,7 +252,7 @@ jobs:
           SLACK_TITLE: 'Status Deploy Service UAT: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
+
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-uat.conclusion == 'failure' }}
         #uses: rtCamp/action-slack-notify@v2
@@ -260,7 +265,7 @@ jobs:
           SLACK_TITLE: 'Status Deploy Service UAT: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          
+
       - name: Trigger Deploy Service to Production
         #uses: trstringer/manual-approval@v1
         uses: olli-ai/manual-approval-action@master
@@ -269,28 +274,33 @@ jobs:
           secret: ${{ secrets.TOKEN }}
           approvers: ${{ inputs.approvers }}
           minimum-approvals: 1
-      
+
       - name: Change Tag Image Production
-        env:        
+        env:
           TAG: ${{steps.version.outputs.version}}
         run: |
           docker pull ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
-      - name: Helm Deploy Service on Production
-        id: helm-prod
-        #uses: koslib/helm-eks-action@master
-        uses: olli-ai/helm-k8s-action@master
-        env:
-          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
-          TAG: ${{steps.version.outputs.version}}
+      - uses: 'google-github-actions/auth@v2'
         with:
-          command: |
-            helm repo add --username ${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_SECRET }} ${{ env.RELEASE_NAME }} https://harbor.jenkins-x-viettel.iviet.com/chartrepo/helm-chart
-            helm repo update
-            helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} ${{ env.RELEASE_NAME }}/service --install --wait -f values-prod.yaml --set image.tag=${{env.TAG}} --atomic --timeout 10m0s
-            
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: "Public endpoint"
+        run: |
+          gcloud run services add-iam-policy-binding  ${{env.ENV_PROD}}-${{env.APP_NAME}} \
+          --member="allUsers" \
+          --role="roles/run.invoker"
+
+      - name: "Deploy new image"
+        run: |
+          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_PROD}}.yaml
+          gcloud run services replace --region asia-southeast1 service-${{env.ENV_PROD}}.yaml
+
       - name: Slack Notification Success
         if: ${{ success() }}
         #uses: rtCamp/action-slack-notify@v2
@@ -303,7 +313,7 @@ jobs:
           SLACK_TITLE: 'Status Deploy Service Production: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
+
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-prod.conclusion == 'failure' }}
         #uses: rtCamp/action-slack-notify@v2
