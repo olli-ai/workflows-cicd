@@ -75,6 +75,7 @@ jobs:
       - name: "Deploy new image"
         run: |
           sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_DEV}}.yaml
+          cat service-dev.yaml
           gcloud run services replace --region asia-southeast1 service-${{env.ENV_DEV}}.yaml
 
       - name: "Public endpoint"
@@ -96,18 +97,18 @@ jobs:
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
-      - name: Slack Notification Failed
-        if: ${{ failure() && steps.helm-dev.conclusion == 'failure' }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy Service Dev: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      # - name: Slack Notification Failed
+      #   if: ${{ failure() && steps.helm-dev.conclusion == 'failure' }}
+      #   #uses: rtCamp/action-slack-notify@v2
+      #   uses: olli-ai/slack-notify-action@master
+      #   env:
+      #     SLACK_CHANNEL: alert-services
+      #     SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+      #     SLACK_LINK_NAMES: true
+      #     SLACK_MESSAGE: ':x: ERROR'
+      #     SLACK_TITLE: 'Status Deploy Service Dev: ${{ env.APP_NAME }}'
+      #     SLACK_USERNAME: devops
+      #     SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
   STAGING:
     if: github.ref == 'refs/heads/master'
