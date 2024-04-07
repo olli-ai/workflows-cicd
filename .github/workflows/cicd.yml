@@ -73,15 +73,15 @@ jobs:
         uses: 'google-github-actions/setup-gcloud@v2'
 
       - name: "Public endpoint"
-        run: |
-          gcloud run services add-iam-policy-binding  ${{env.ENV_DEV}}-${{env.APP_NAME}} \
-          --member="allUsers" \
-          --role="roles/run.invoker"
-
       - name: "Deploy new image"
         run: |
           sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_DEV}}.yaml
           gcloud run services replace --region asia-southeast1 service-${{env.ENV_DEV}}.yaml
+
+        run: |
+          gcloud run services add-iam-policy-binding  ${{env.ENV_DEV}}-${{env.APP_NAME}} \
+          --member="allUsers" \
+          --role="roles/run.invoker"
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -151,16 +151,16 @@ jobs:
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
+      - name: "Deploy new image"
+        run: |
+          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_STG}}.yaml
+          gcloud run services replace --region asia-southeast1 service-${{env.ENV_STG}}.yaml
+
       - name: "Public endpoint"
         run: |
           gcloud run services add-iam-policy-binding  ${{env.ENV_STG}}-${{env.APP_NAME}} \
           --member="allUsers" \
           --role="roles/run.invoker"
-
-      - name: "Deploy new image"
-        run: |
-          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_STG}}.yaml
-          gcloud run services replace --region asia-southeast1 service-${{env.ENV_STG}}.yaml
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -229,16 +229,16 @@ jobs:
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
+      - name: "Deploy new image"
+        run: |
+          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_PRE-PROD}}.yaml
+          gcloud run services replace --region asia-southeast1 service-${{env.ENV_PRE-PROD}}.yaml
+
       - name: "Public endpoint"
         run: |
           gcloud run services add-iam-policy-binding  ${{env.ENV_PRE-PROD}}-${{env.APP_NAME}} \
           --member="allUsers" \
           --role="roles/run.invoker"
-
-      - name: "Deploy new image"
-        run: |
-          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_PRE-PROD}}.yaml
-          gcloud run services replace --region asia-southeast1 service-${{env.ENV_PRE-PROD}}.yaml
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -290,16 +290,16 @@ jobs:
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
+      - name: "Deploy new image"
+        run: |
+          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_PROD}}.yaml
+          gcloud run services replace --region asia-southeast1 service-${{env.ENV_PROD}}.yaml
+
       - name: "Public endpoint"
         run: |
           gcloud run services add-iam-policy-binding  ${{env.ENV_PROD}}-${{env.APP_NAME}} \
           --member="allUsers" \
           --role="roles/run.invoker"
-
-      - name: "Deploy new image"
-        run: |
-          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_PROD}}.yaml
-          gcloud run services replace --region asia-southeast1 service-${{env.ENV_PROD}}.yaml
 
       - name: Slack Notification Success
         if: ${{ success() }}
