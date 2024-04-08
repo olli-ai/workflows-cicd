@@ -82,7 +82,7 @@ jobs:
 
       - name: "Public endpoint"
         run: |
-          gcloud run services add-iam-policy-binding  ${{env.ENV_DEV}}-${{env.APP_NAME}} \
+          gcloud run services add-iam-policy-binding --region asia-southeast1 ${{env.ENV_DEV}}-${{env.APP_NAME}} \
           --member="allUsers" \
           --role="roles/run.invoker"
 
@@ -99,18 +99,18 @@ jobs:
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
-      # - name: Slack Notification Failed
-      #   if: ${{ failure() && steps.helm-dev.conclusion == 'failure' }}
-      #   #uses: rtCamp/action-slack-notify@v2
-      #   uses: olli-ai/slack-notify-action@master
-      #   env:
-      #     SLACK_CHANNEL: alert-services
-      #     SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-      #     SLACK_LINK_NAMES: true
-      #     SLACK_MESSAGE: ':x: ERROR'
-      #     SLACK_TITLE: 'Status Deploy Service Dev: ${{ env.APP_NAME }}'
-      #     SLACK_USERNAME: devops
-      #     SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      - name: Slack Notification Failed
+        if: ${{ failure() && steps.helm-dev.conclusion == 'failure' }}
+        #uses: rtCamp/action-slack-notify@v2
+        uses: olli-ai/slack-notify-action@master
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':x: ERROR'
+          SLACK_TITLE: 'Status Deploy Service Dev: ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
   STAGING:
     if: github.ref == 'refs/heads/master'
@@ -163,7 +163,7 @@ jobs:
 
       - name: "Public endpoint"
         run: |
-          gcloud run services add-iam-policy-binding  ${{env.ENV_STG}}-${{env.APP_NAME}} \
+          gcloud run services add-iam-policy-binding --region asia-southeast1 ${{env.ENV_STG}}-${{env.APP_NAME}} \
           --member="allUsers" \
           --role="roles/run.invoker"
 
@@ -243,7 +243,7 @@ jobs:
 
       - name: "Public endpoint"
         run: |
-          gcloud run services add-iam-policy-binding  ${{env.ENV_PRE-PROD}}-${{env.APP_NAME}} \
+          gcloud run services add-iam-policy-binding --region asia-southeast1 ${{env.ENV_PRE-PROD}}-${{env.APP_NAME}} \
           --member="allUsers" \
           --role="roles/run.invoker"
 
@@ -306,7 +306,7 @@ jobs:
 
       - name: "Public endpoint"
         run: |
-          gcloud run services add-iam-policy-binding  ${{env.ENV_PROD}}-${{env.APP_NAME}} \
+          gcloud run services add-iam-policy-binding --region asia-southeast1 ${{env.ENV_PROD}}-${{env.APP_NAME}} \
           --member="allUsers" \
           --role="roles/run.invoker"
 
