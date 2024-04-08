@@ -77,7 +77,6 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_DEV}}.yaml
-          gcloud auth list
           gcloud run services replace --region asia-southeast1 service-${{env.ENV_DEV}}.yaml
 
       - name: "Public endpoint"
