@@ -94,7 +94,7 @@ jobs:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
           TAG: ${{steps.version.outputs.version}}
         with:
-          command: |
+          run: |
             echo "$KUBE_CONFIG_DATA" | base64 --decode > kubeconfig.yaml
             export KUBECONFIG=kubeconfig.yaml
             helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-dev.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
