@@ -4,6 +4,18 @@ on:
       appName:
         required: true
         type: string
+      googleStorageBucketDev:
+        required: true
+        type: string
+      googleStorageBucketStaging:
+        required: true
+        type: string
+      googleStorageBucketUat:
+        required: true
+        type: string
+      googleStorageBucketProd:
+        required: true
+        type: string
     secrets:
       GOOGLE_CREDENTIALS:
         required: true
@@ -11,6 +23,10 @@ on:
         required: true
 env:
   APP_NAME: ${{ inputs.appName }}
+  GOOGLE_STORAGE_BUCKET_DEV: ${{ inputs.googleStorageBucketDev }}
+  GOOGLE_STORAGE_BUCKET_STAGING: ${{ inputs.googleStorageBucketStaging }}
+  GOOGLE_STORAGE_BUCKET_UAT: ${{ inputs.googleStorageBucketUat }}
+  GOOGLE_STORAGE_BUCKET_PROD: ${{ inputs.googleStorageBucketProd }}
   
 jobs:
   DEV:
@@ -30,8 +46,9 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: 18
-      - run: npm install
-      - run: npm run build-dev
+      - run: npm install --global yarn
+      - run: yarn install
+      - run: yarn run build-dev
 
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
@@ -43,7 +60,7 @@ jobs:
         uses: 'google-github-actions/upload-cloud-storage@v1'
         with:
           path: 'dist'
-          destination: 'maika-ai-landingpage-dev'
+          destination: ${{ env.GOOGLE_STORAGE_BUCKET_DEV }}
           parent: false
 
       - name: Slack Notification Success
@@ -86,8 +103,9 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: 18
-      - run: npm install
-      - run: npm run build-staging
+      - run: npm install --global yarn
+      - run: yarn install
+      - run: yarn run build-staging
 
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
@@ -99,7 +117,7 @@ jobs:
         uses: 'google-github-actions/upload-cloud-storage@v1'
         with:
           path: 'dist'
-          destination: 'maika-ai-landingpage-staging'
+          destination: ${{ env.GOOGLE_STORAGE_BUCKET_STAGING }}
           parent: false
 
       - name: Slack Notification Success
@@ -142,8 +160,10 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: 18
-      - run: npm install
-      - run: npm run build-uat
+      - run: npm install --global yarn
+      - run: yarn install
+      - run: yarn run build-uat
+
 
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
@@ -155,7 +175,7 @@ jobs:
         uses: 'google-github-actions/upload-cloud-storage@v1'
         with:
           path: 'dist'
-          destination: 'maika-ai-landingpage-uat'
+          destination: ${{ env.GOOGLE_STORAGE_BUCKET_UAT }}
           parent: false
 
       - name: Slack Notification Success
@@ -198,8 +218,9 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: 18
-      - run: npm install
-      - run: npm run build-production
+      - run: npm install --global yarn
+      - run: yarn install
+      - run: yarn run build-production
 
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
@@ -211,7 +232,7 @@ jobs:
         uses: 'google-github-actions/upload-cloud-storage@v1'
         with:
           path: 'dist'
-          destination: 'maika-ai-landingpage'
+          destination: ${{ env.GOOGLE_STORAGE_BUCKET_PROD }}
           parent: false
 
       - name: Slack Notification Success
