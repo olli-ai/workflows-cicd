@@ -15,8 +15,7 @@ env:
 jobs:
   DEV:
     if: github.ref == 'refs/heads/dev'
-    runs-on: Linux
-    #runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -77,8 +76,7 @@ jobs:
           
   STAGING:
     if: github.ref == 'refs/heads/master-v2'
-    runs-on: Linux 
-    #runs-on: ubuntu-latest
+    runs-on: ubuntu-latest 
     permissions:
       contents: read
       packages: write
@@ -138,8 +136,7 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
   UAT:
     if: github.ref == 'refs/heads/pre-production'
-    runs-on: Linux 
-    #runs-on: ubuntu-latest
+    runs-on: ubuntu-latest 
     permissions:
       contents: read
       packages: write
@@ -199,8 +196,7 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
   PRODUCTION:
     if: github.ref == 'refs/heads/production'
-    runs-on: Linux 
-    #runs-on: ubuntu-latest
+    runs-on: ubuntu-latest 
     permissions:
       contents: read
       packages: write
