@@ -19,11 +19,6 @@ on:
       staticFolderPath:
         required: true
         type: string
-    secrets:
-      GOOGLE_CREDENTIALS:
-        required: true
-      SLACK_WEBHOOK:
-        required: true
 env:
   APP_NAME: ${{ inputs.appName }}
   GOOGLE_STORAGE_BUCKET_DEV: ${{ inputs.googleStorageBucketDev }}
@@ -56,7 +51,7 @@ jobs:
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
         with:
-          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
       
       - name: "Upload Source to Google Cloud"     
         id: 'upload-folder'
@@ -112,7 +107,7 @@ jobs:
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
         with:
-          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
       
       - name: "Upload Source to Google Cloud"     
         id: 'upload-folder'
@@ -169,7 +164,7 @@ jobs:
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
         with:
-          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
       
       - name: "Upload Source to Google Cloud"     
         id: 'upload-folder'
@@ -225,7 +220,7 @@ jobs:
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
         with:
-          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
       
       - name: "Upload Source to Google Cloud"     
         id: 'upload-folder'
