@@ -20,8 +20,10 @@ on:
         required: true
         type: string
     secrets:
-      GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
-      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      GOOGLE_CREDENTIALS:
+        required: true
+      SLACK_WEBHOOK:
+        required: true
 env:
   APP_NAME: ${{ inputs.appName }}
   GOOGLE_STORAGE_BUCKET_DEV: ${{ inputs.googleStorageBucketDev }}
