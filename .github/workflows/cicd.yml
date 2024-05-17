@@ -16,6 +16,9 @@ on:
       googleStorageBucketProd:
         required: true
         type: string
+      staticFolderPath:
+        required: true
+        type: string
     secrets:
       GOOGLE_CREDENTIALS:
         required: true
@@ -27,12 +30,12 @@ env:
   GOOGLE_STORAGE_BUCKET_STAGING: ${{ inputs.googleStorageBucketStaging }}
   GOOGLE_STORAGE_BUCKET_UAT: ${{ inputs.googleStorageBucketUat }}
   GOOGLE_STORAGE_BUCKET_PROD: ${{ inputs.googleStorageBucketProd }}
+  STATIC_FOLDER_PATH: ${{ inputs.staticFolderPath }}
   
 jobs:
   DEV:
     if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
-    #runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -59,7 +62,7 @@ jobs:
         id: 'upload-folder'
         uses: 'google-github-actions/upload-cloud-storage@v1'
         with:
-          path: 'dist'
+          path: ${{ env.STATIC_FOLDER_PATH }}
           destination: ${{ env.GOOGLE_STORAGE_BUCKET_DEV }}
           parent: false
 
@@ -89,7 +92,6 @@ jobs:
   STAGING:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    #runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -116,7 +118,7 @@ jobs:
         id: 'upload-folder'
         uses: 'google-github-actions/upload-cloud-storage@v1'
         with:
-          path: 'dist'
+          path: ${{ env.STATIC_FOLDER_PATH }}
           destination: ${{ env.GOOGLE_STORAGE_BUCKET_STAGING }}
           parent: false
 
@@ -146,7 +148,6 @@ jobs:
   UAT:
     if: github.ref == 'refs/heads/pre-production'
     runs-on: ubuntu-latest
-    #runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -174,7 +175,7 @@ jobs:
         id: 'upload-folder'
         uses: 'google-github-actions/upload-cloud-storage@v1'
         with:
-          path: 'dist'
+          path: ${{ env.STATIC_FOLDER_PATH }}
           destination: ${{ env.GOOGLE_STORAGE_BUCKET_UAT }}
           parent: false
 
@@ -204,7 +205,6 @@ jobs:
   PRODUCTION:
     if: github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
-    #runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -231,7 +231,7 @@ jobs:
         id: 'upload-folder'
         uses: 'google-github-actions/upload-cloud-storage@v1'
         with:
-          path: 'dist'
+          path: ${{ env.STATIC_FOLDER_PATH }}
           destination: ${{ env.GOOGLE_STORAGE_BUCKET_PROD }}
           parent: false
 
