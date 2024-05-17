@@ -19,6 +19,9 @@ on:
       staticFolderPath:
         required: true
         type: string
+    secrets:
+      GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 env:
   APP_NAME: ${{ inputs.appName }}
   GOOGLE_STORAGE_BUCKET_DEV: ${{ inputs.googleStorageBucketDev }}
