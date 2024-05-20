@@ -46,7 +46,7 @@ env:
 jobs:
   DEV:
     if: github.ref == 'refs/heads/dev'
-    runs-on: Linux 
+    runs-on: ubuntu-latest 
     permissions:
       contents: read
       packages: write
@@ -119,7 +119,7 @@ jobs:
      
   STAGING:
     if: github.ref == 'refs/heads/master'
-    runs-on: Linux 
+    runs-on: ubuntu-latest 
     permissions:
       contents: read
       packages: write
@@ -192,7 +192,7 @@ jobs:
           
   PRODUCTION:
     if: github.ref == 'refs/heads/pre-production'
-    runs-on: Linux 
+    runs-on: ubuntu-latest 
     permissions:
       contents: read
       packages: write
