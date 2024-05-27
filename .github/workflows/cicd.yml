@@ -68,6 +68,12 @@ jobs:
           username: _json_key
           password: ${{ secrets.GCP_CREDENTIALS }}
 
+      - name: Set BUILD_ENV
+        id: set-env
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/dev" ]; then echo "BUILD_ENV=${{ env.ENV_DEV }}" >> $GITHUB_ENV; fi
+          if [ "${{ github.ref }}" == "refs/heads/master" ]; then echo "BUILD_ENV=${{ env.ENV_STG }}" >> $GITHUB_ENV; fi
+
       - name: Generate Tag Version
         id: version
         uses: paulhatch/semantic-version@v4.0.2
@@ -79,14 +85,13 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.BUILD_ENV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.BUILD_ENV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
   DEV:
     if: github.ref == 'refs/heads/dev'
     needs: BUILD
     runs-on: ubuntu-latest
-    #runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -108,20 +113,6 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: _json_key
           password: ${{ secrets.GCP_CREDENTIALS }}
-
-      # - name: Generate Tag Version
-      #   id: version
-      #   uses: paulhatch/semantic-version@v4.0.2
-      #   with:
-      #     bump_each_commit: true
-
-      # - name: Build & Tag & Push Docker image
-      #   env:
-      #     TAG: ${{steps.version.outputs.version}}
-      #   run: |
-      #     DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-      #     docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-      #     docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
       - name: Install Helm
         run: |
