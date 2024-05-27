@@ -91,10 +91,11 @@ jobs:
       contents: read
       packages: write
     steps:
-      # - name: Checkout repository
-      #   uses: actions/checkout@v3
-      #   with:
-      #     fetch-depth: 0
+      - name: Checkout repository
+        # necessary to get values-dev.yaml, values-stg.yaml...
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - id: 'auth'
         uses: 'google-github-actions/auth@v1'
@@ -173,10 +174,11 @@ jobs:
       contents: read
       packages: write
     steps:
-      # - name: Checkout repository
-      #   uses: actions/checkout@v3
-      #   with:
-      #     fetch-depth: 0
+      - name: Checkout repository
+        # necessary to get values-dev.yaml, values-stg.yaml...
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - id: 'auth'
         uses: 'google-github-actions/auth@v1'
