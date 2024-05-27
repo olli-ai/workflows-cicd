@@ -43,7 +43,7 @@ env:
 
 jobs:
   BUILD:
-    if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master' || github.ref == 'refs/head/pre-production'
+    if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/pre-production'
     runs-on: ubuntu-latest
     permissions:
       contents: read
