@@ -36,6 +36,7 @@ jobs:
         uses: 'google-github-actions/auth@v1'
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+      - run: gcloud auth list
 
       - name: "Upload Source to Google Cloud"
         id: 'upload-folder'
@@ -97,7 +98,7 @@ jobs:
         uses: 'google-github-actions/auth@v1'
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-      
+      - run: gcloud auth list      
       - name: "Upload Source to Google Cloud"     
         id: 'upload-folder'
         uses: 'google-github-actions/upload-cloud-storage@v1'
@@ -157,7 +158,7 @@ jobs:
         uses: 'google-github-actions/auth@v1'
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-      
+      - run: gcloud auth list      
       - name: "Upload Source to Google Cloud"     
         id: 'upload-folder'
         uses: 'google-github-actions/upload-cloud-storage@v1'
@@ -217,7 +218,7 @@ jobs:
         uses: 'google-github-actions/auth@v1'
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-      
+      - run: gcloud auth list      
       - name: "Upload Source to Google Cloud"     
         id: 'upload-folder'
         uses: 'google-github-actions/upload-cloud-storage@v1'
