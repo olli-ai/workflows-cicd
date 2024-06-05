@@ -36,7 +36,6 @@ jobs:
         uses: 'google-github-actions/auth@v1'
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-      - run: gcloud auth list
 
       - name: "Upload Source to Google Cloud"
         id: 'upload-folder'
@@ -47,6 +46,7 @@ jobs:
           parent: false
 
       - uses: "google-github-actions/setup-gcloud@v2"
+      - run: gcloud auth list
       - name: "Invalidation cache"
         run: |
           gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host dev2.app.maika.ai --path "/*" --async
@@ -98,7 +98,6 @@ jobs:
         uses: 'google-github-actions/auth@v1'
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-      - run: gcloud auth list      
       - name: "Upload Source to Google Cloud"     
         id: 'upload-folder'
         uses: 'google-github-actions/upload-cloud-storage@v1'
@@ -108,6 +107,7 @@ jobs:
           parent: false
 
       - uses: "google-github-actions/setup-gcloud@v2"
+      - run: gcloud auth list
       - name: "Invalidation cache"
         run: |
           gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host staging2.app.maika.ai --path "/*" --async
@@ -157,8 +157,7 @@ jobs:
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
         with:
-          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-      - run: gcloud auth list      
+          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'   
       - name: "Upload Source to Google Cloud"     
         id: 'upload-folder'
         uses: 'google-github-actions/upload-cloud-storage@v1'
@@ -168,6 +167,7 @@ jobs:
           parent: false
 
       - uses: "google-github-actions/setup-gcloud@v2"
+      - run: gcloud auth list
       - name: "Invalidation cache"
         run: |
           gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host uat2.app.maika.ai --path "/*" --async
@@ -217,8 +217,7 @@ jobs:
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
         with:
-          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-      - run: gcloud auth list      
+          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}' 
       - name: "Upload Source to Google Cloud"     
         id: 'upload-folder'
         uses: 'google-github-actions/upload-cloud-storage@v1'
@@ -228,6 +227,7 @@ jobs:
           parent: false
 
       - uses: "google-github-actions/setup-gcloud@v2"
+      - run: gcloud auth list
       - name: "Invalidation cache"
         run: |
           gcloud compute url-maps invalidate-cdn-cache maika-ai-frontend --host app.maika.ai --path "/*" --async
