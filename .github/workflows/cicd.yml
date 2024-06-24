@@ -193,7 +193,7 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
   PRODUCTION:
-    if: github.ref == 'refs/heads/pre-production'
+    if: github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -223,70 +223,7 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-
-      - uses: 'google-github-actions/auth@v2'
-        with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
-
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
-
-      - name: "Deploy new image"
-        env:
-          TAG: ${{steps.version.outputs.version}}
-        run: |
-          sed -i -e 's|image: .*|image: '${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}'|g' service-${{env.ENV_PRE-PROD}}.yaml
-          gcloud run services replace --region asia-southeast1 service-${{env.ENV_PRE-PROD}}.yaml
-
-      - name: "Public endpoint"
-        run: |
-          gcloud run services add-iam-policy-binding --region asia-southeast1 ${{env.ENV_PRE-PROD}}-${{env.APP_NAME}} \
-          --member="allUsers" \
-          --role="roles/run.invoker"
-
-      - name: Slack Notification Success
-        if: ${{ success() }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy Service UAT: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-
-      - name: Slack Notification Failed
-        if: ${{ failure() && steps.helm-uat.conclusion == 'failure' }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy Service UAT: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-
-      - name: Trigger Deploy Service to Production
-        #uses: trstringer/manual-approval@v1
-        uses: olli-ai/manual-approval-action@master
-        timeout-minutes: 1
-        with:
-          secret: ${{ secrets.TOKEN }}
-          approvers: ${{ inputs.approvers }}
-          minimum-approvals: 1
-
-      - name: Change Tag Image Production
-        env:
-          TAG: ${{steps.version.outputs.version}}
-        run: |
-          docker pull ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
       - uses: 'google-github-actions/auth@v2'
