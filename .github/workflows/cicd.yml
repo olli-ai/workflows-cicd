@@ -7,26 +7,20 @@ on:
       appName:
         required: true
         type: string
-      approvers:
-        required: true
-        type: string
     secrets:
-      DOCKER_USERNAME:
-        required: true
-      DOCKER_SECRET:
-        required: true
       SLACK_WEBHOOK:
-        required: true
-      KUBE_CONFIG_DATA:
-        required: true
-      GCP_CREDENTIALS:
         required: true
       TOKEN:
         required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+
 env:
+  EKS_CLUSTER: eks-primary-prod-01
   # CI
-  REGISTRY: asia-southeast1-docker.pkg.dev
-  PROJECT_NAME: olli-iviet
+  REGISTRY: 905418372464.dkr.ecr.ap-southeast-1.amazonaws.com
   IMAGE_NAME: ${{ inputs.imageName }}
   ENV_DEV: dev
   ENV_STG: stg 
@@ -44,27 +38,21 @@ jobs:
   DEV:
     if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - id: 'auth'
-        uses: 'google-github-actions/auth@v1'
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-1
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: _json_key
-          password: ${{ secrets.GCP_CREDENTIALS }}
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Generate Tag Version
         id: version
@@ -77,25 +65,20 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
-      - id: 'get-credentials'
-        uses: 'google-github-actions/get-gke-credentials@v1'
-        with:
-          cluster_name: 'olli-ai'
-          location: 'asia-southeast1'
-          
       - name: Helm Deploy Service on dev
         id: 'helm-dev'
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
+          aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{env.EKS_CLUSTER}}
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
-          helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-dev.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+          helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
+          helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-dev.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
             
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -126,27 +109,21 @@ jobs:
   STAGING:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - id: 'auth'
-        uses: 'google-github-actions/auth@v1'
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-1
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: _json_key
-          password: ${{ secrets.GCP_CREDENTIALS }}
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Generate Tag Version
         id: version
@@ -159,26 +136,21 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
-      - id: 'get-credentials'
-        uses: 'google-github-actions/get-gke-credentials@v1'
-        with:
-          cluster_name: 'olli-ai'
-          location: 'asia-southeast1'
-          
       - name: Helm Deploy Service on staging
         id: 'helm-stg'
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
+          aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{env.EKS_CLUSTER}}
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
-          helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-stg.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
-            
+          helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
+          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-stg.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+
       - name: Slack Notification Success
         if: ${{ success() }}
         #uses: rtCamp/action-slack-notify@v2
@@ -208,27 +180,21 @@ jobs:
   UAT:
     if: github.ref == 'refs/heads/pre-production'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - id: 'auth'
-        uses: 'google-github-actions/auth@v1'
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-1
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: _json_key
-          password: ${{ secrets.GCP_CREDENTIALS }}
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Generate Tag Version
         id: version
@@ -241,25 +207,20 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker push ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
-      - id: 'get-credentials'
-        uses: 'google-github-actions/get-gke-credentials@v1'
-        with:
-          cluster_name: 'olli-ai'
-          location: 'asia-southeast1'
-          
       - name: Helm Deploy Service on uat
         id: 'helm-uat'
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
+          aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{env.EKS_CLUSTER}}
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
-          helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-uat.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+          helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
+          helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-uat.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
             
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -297,41 +258,35 @@ jobs:
       #     minimum-approvals: 1
       
       - name: Change Tag Image Production
-        env:        
+        env:
           TAG: ${{steps.version.outputs.version}}
         run: |
-          docker pull ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker tag ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} 
-          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker tag ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
-          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
+          docker pull ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} 
+          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
+          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
     # outputs:
     #   output1: ${{ steps.version.outputs.version }}
       
   PRODUCTION:
     if: github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - id: 'auth'
-        uses: 'google-github-actions/auth@v1'
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-1
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: _json_key
-          password: ${{ secrets.GCP_CREDENTIALS }}
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Generate Tag Version
         id: version
@@ -344,26 +299,21 @@ jobs:
           TAG: latest
           NEW_TAG: ${{steps.version.outputs.version}}
         run: |
-          docker pull ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker tag ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.NEW_TAG}}
-          docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.NEW_TAG}}
+          docker pull ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          docker tag ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.NEW_TAG}}
+          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.NEW_TAG}}
 
-      - id: 'get-credentials'
-        uses: 'google-github-actions/get-gke-credentials@v1'
-        with:
-          cluster_name: 'olli-ai'
-          location: 'asia-southeast1'
-          
       - name: Helm Deploy Service on Production
         id: 'helm-prod'
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
+          aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{env.EKS_CLUSTER}}
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
-          helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-prod.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+          helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
+          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-prod.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
 
       - name: Slack Notification Success
         if: ${{ success() }}
@@ -377,7 +327,7 @@ jobs:
           SLACK_TITLE: 'Status Deploy Service Production: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
+
       - name: Slack Notification Failed
         if: ${{ failure() && steps.helm-prod.conclusion == 'failure' }}
         #uses: rtCamp/action-slack-notify@v2
