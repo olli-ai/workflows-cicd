@@ -65,7 +65,7 @@ jobs:
           aws --region ap-southeast-1 ecr describe-repositories \
           --repository-names ${{env.ENV_DEV}}/${{env.IMAGE_NAME}} || \
           aws --region ap-southeast-1 ecr create-repository \
-          --repository-names ${{env.ENV_DEV}}/${{env.IMAGE_NAME}}
+          --repository-name ${{env.ENV_DEV}}/${{env.IMAGE_NAME}}
 
       - name: Build & Tag & Push Docker image
         env:
@@ -143,7 +143,7 @@ jobs:
           aws --region ap-southeast-1 ecr describe-repositories \
           --repository-names ${{env.ENV_STG}}/${{env.IMAGE_NAME}} || \
           aws --region ap-southeast-1 ecr create-repository \
-          --repository-names ${{env.ENV_STG}}/${{env.IMAGE_NAME}}
+          --repository-name ${{env.ENV_STG}}/${{env.IMAGE_NAME}}
 
       - name: Build & Tag & Push Docker image
         env:
@@ -221,7 +221,7 @@ jobs:
           aws --region ap-southeast-1 ecr describe-repositories \
           --repository-names ${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}} || \
           aws --region ap-southeast-1 ecr create-repository \
-          --repository-names ${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}
+          --repository-name ${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}
 
       - name: Build & Tag & Push Docker image
         env:
@@ -320,7 +320,7 @@ jobs:
           aws --region ap-southeast-1 ecr describe-repositories \
           --repository-names ${{env.ENV_PROD}}/${{env.IMAGE_NAME}} || \
           aws --region ap-southeast-1 ecr create-repository \
-          --repository-names ${{env.ENV_PROD}}/${{env.IMAGE_NAME}}
+          --repository-name ${{env.ENV_PROD}}/${{env.IMAGE_NAME}}
 
       - name: Get latest image
         env:        
