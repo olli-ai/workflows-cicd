@@ -309,14 +309,24 @@ jobs:
     #   output1: ${{ steps.version.outputs.version }}
       
   PRODUCTION:
-    if: github.ref == 'refs/heads/production'
+    if: github.ref == 'refs/heads/pre-production'
+    needs: UAT
     runs-on: ubuntu-latest
+    #runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     steps:
+      - name: Trigger Deploy Service to Production
+        #uses: trstringer/manual-approval@v1
+        uses: olli-ai/manual-approval-action@master
+        timeout-minutes: 5
+        with:
+          secret: ${{ secrets.TOKEN }}
+          approvers: ${{ inputs.approvers }}
+          minimum-approvals: 1
       - name: Checkout repository
+        # necessary to get values-dev.yaml, values-stg.yaml...
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
