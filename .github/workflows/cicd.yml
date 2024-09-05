@@ -16,6 +16,7 @@ on:
         required: true
       AWS_SECRET_ACCESS_KEY:
         required: true
+      
 
 env:
   EKS_CLUSTER: eks-primary-prod-01
@@ -44,6 +45,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: true # Automatically initializes and updates submodules
+          token: ${{ secrets.TOKEN }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -123,6 +125,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: true # Automatically initializes and updates submodules
+          token: ${{ secrets.TOKEN }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -202,6 +205,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: true # Automatically initializes and updates submodules
+          token: ${{ secrets.TOKEN }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
