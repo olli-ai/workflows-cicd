@@ -53,7 +53,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm install --global yarn
+      # - run: npm install --global yarn
       - run: npm install
       - run: npm run build-dev
 
@@ -109,7 +109,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm install --global yarn
+      # # # - run: npm install --global yarn
       - run: npm install
       - run: npm run build-staging
 
@@ -165,7 +165,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm install --global yarn
+      # - run: npm install --global yarn
       - run: npm install
       - run: npm run build-uat
 
@@ -222,7 +222,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm install --global yarn
+      # - run: npm install --global yarn
       - run: npm install
       - run: npm run build-production
 
