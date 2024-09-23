@@ -19,6 +19,9 @@ on:
       staticFolderPath:
         required: true
         type: string
+      nodeVersion:
+        required: true
+        type: string
     secrets:
       GOOGLE_CREDENTIALS:
         required: true
@@ -31,6 +34,7 @@ env:
   GOOGLE_STORAGE_BUCKET_UAT: ${{ inputs.googleStorageBucketUat }}
   GOOGLE_STORAGE_BUCKET_PROD: ${{ inputs.googleStorageBucketProd }}
   STATIC_FOLDER_PATH: ${{ inputs.staticFolderPath }}
+  NODE_VERSION: ${{ inputs.nodeVersion }}
   
 jobs:
   DEV:
@@ -48,7 +52,7 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global yarn
       - run: yarn install
       - run: yarn run build-dev
@@ -104,7 +108,7 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global yarn
       - run: yarn install
       - run: yarn run build-staging
@@ -160,7 +164,7 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global yarn
       - run: yarn install
       - run: yarn run build-uat
@@ -217,7 +221,7 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global yarn
       - run: yarn install
       - run: yarn run build-production
