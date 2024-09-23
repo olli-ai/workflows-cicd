@@ -54,8 +54,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global yarn
-      - run: yarn install
-      - run: yarn run build-dev
+      - run: npm install
+      - run: npm run build-dev
 
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
@@ -110,8 +110,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global yarn
-      - run: yarn install
-      - run: yarn run build-staging
+      - run: npm install
+      - run: npm run build-staging
 
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
@@ -166,8 +166,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global yarn
-      - run: yarn install
-      - run: yarn run build-uat
+      - run: npm install
+      - run: npm run build-uat
 
 
       - name: 'Authenticate to Google Cloud'
@@ -223,8 +223,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global yarn
-      - run: yarn install
-      - run: yarn run build-production
+      - run: npm install
+      - run: npm run build-production
 
       - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
