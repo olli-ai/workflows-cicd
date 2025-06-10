@@ -20,7 +20,7 @@ on:
 env:
   EKS_CLUSTER: eks-primary-prod-01
   # CI
-  REGISTRY: 905418372464.dkr.ecr.ap-southeast-1.amazonaws.com
+  REGISTRY: 905418372464.dkr.ecr.us-east-1.amazonaws.com
   IMAGE_NAME: ${{ inputs.imageName }}
   ENV_DEV: dev
   ENV_STG: stg 
