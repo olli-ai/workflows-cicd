@@ -21,6 +21,7 @@ env:
   EKS_CLUSTER: buddyos
   # CI
   REGISTRY: 905418372464.dkr.ecr.us-east-1.amazonaws.com
+  REGISTRY_SING: 905418372464.dkr.ecr.ap-southeast-1.amazonaws.com
   IMAGE_NAME: ${{ inputs.imageName }}
   ENV_DEV: dev
   ENV_STG: stg 
@@ -164,8 +165,8 @@ jobs:
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
-          helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-stg.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+          helm pull oci://${{env.REGISTRY_SING}}/helm-chart/all-service
+          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{env.REGISTRY_SING}}/helm-chart/all-service --install --wait -f values-stg.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
 
       - name: Slack Notification Success
         if: ${{ success() }}
