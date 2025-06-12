@@ -176,7 +176,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_STG }}: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
     
@@ -189,7 +189,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_STG }}: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           
