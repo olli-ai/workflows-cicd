@@ -19,7 +19,7 @@ on:
 
 env:
   EKS_CLUSTER: buddyos
-  # CI
+  AWS_REGION: us-east-1
   REGISTRY: 905418372464.dkr.ecr.us-east-1.amazonaws.com
   IMAGE_NAME: ${{ inputs.imageName }}
   ENV_DEV: dev
@@ -36,7 +36,7 @@ env:
 
 jobs:
   DEV:
-    if: github.ref == 'refs/heads/dev'
+    if: github.ref == 'refs/heads/dev-us'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -50,7 +50,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{env.AWS_REGION}}
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -63,9 +63,9 @@ jobs:
 
       - name: Create ECR repository
         run: |
-          aws --region us-east-1 ecr describe-repositories \
+          aws --region ${{env.AWS_REGION}} ecr describe-repositories \
           --repository-names ${{env.ENV_DEV}}/${{env.IMAGE_NAME}} || \
-          aws --region us-east-1 ecr create-repository \
+          aws --region ${{env.AWS_REGION}} ecr create-repository \
           --repository-name ${{env.ENV_DEV}}/${{env.IMAGE_NAME}}
 
       - name: Build & Tag & Push Docker image
@@ -81,7 +81,7 @@ jobs:
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
-          aws --region us-east-1 eks update-kubeconfig --region us-east-1 --name ${{env.EKS_CLUSTER}}
+          aws --region ${{env.AWS_REGION}} eks update-kubeconfig --region ${{env.AWS_REGION}} --name ${{env.EKS_CLUSTER}}
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
@@ -97,7 +97,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on Dev US-AWS: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
     
@@ -110,12 +110,12 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on Dev US-AWS: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
      
   STAGING:
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master-us'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -129,7 +129,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{env.AWS_REGION}}
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -142,9 +142,9 @@ jobs:
 
       - name: Create ECR repository
         run: |
-          aws --region us-east-1 ecr describe-repositories \
+          aws --region ${{env.AWS_REGION}} ecr describe-repositories \
           --repository-names ${{env.ENV_STG}}/${{env.IMAGE_NAME}} || \
-          aws --region us-east-1 ecr create-repository \
+          aws --region ${{env.AWS_REGION}} ecr create-repository \
           --repository-name ${{env.ENV_STG}}/${{env.IMAGE_NAME}}
 
       - name: Build & Tag & Push Docker image
@@ -160,7 +160,7 @@ jobs:
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
-          aws --region us-east-1 eks update-kubeconfig --region us-east-1 --name ${{env.EKS_CLUSTER}}
+          aws --region ${{env.AWS_REGION}} eks update-kubeconfig --region ${{env.AWS_REGION}} --name ${{env.EKS_CLUSTER}}
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
@@ -176,7 +176,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_STG }}: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on Staging US-AWS: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
     
@@ -189,26 +189,26 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_STG }}: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on Staging US-AWS: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          
-  UAT:
-    if: github.ref == 'refs/heads/pre-production'
+
+      
+  PRODUCTION:
+    if: github.ref == 'refs/heads/production-us'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          submodules: true # Automatically initializes and updates submodules
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{env.AWS_REGION}}
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -221,13 +221,9 @@ jobs:
 
       - name: Create ECR repository
         run: |
-          aws --region us-east-1 ecr describe-repositories \
-          --repository-names ${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}} || \
-          aws --region us-east-1 ecr create-repository \
-          --repository-name ${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}
-          aws --region us-east-1 ecr describe-repositories \
+          aws --region ${{env.AWS_REGION}} ecr describe-repositories \
           --repository-names ${{env.ENV_PROD}}/${{env.IMAGE_NAME}} || \
-          aws --region us-east-1 ecr create-repository \
+          aws --region ${{env.AWS_REGION}} ecr create-repository \
           --repository-name ${{env.ENV_PROD}}/${{env.IMAGE_NAME}}
 
       - name: Build & Tag & Push Docker image
@@ -235,115 +231,15 @@ jobs:
           TAG: ${{steps.version.outputs.version}}
         run: |
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-
-      - name: Helm Deploy Service on uat
-        id: 'helm-uat'
-        env:
-          TAG: ${{steps.version.outputs.version}}
-        run: |
-          aws --region us-east-1 eks update-kubeconfig --region us-east-1 --name ${{env.EKS_CLUSTER}}
-          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-          chmod 700 get_helm.sh
-          bash get_helm.sh
-          helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-uat.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
-            
-      - name: Slack Notification Success
-        if: ${{ success() }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action-gke@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_PRE-PROD }}: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
-      - name: Slack Notification Failed
-        if: ${{ failure() && steps.helm-uat.conclusion == 'failure' }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action-gke@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_PRE-PROD }}: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-                    
-      # - name: Trigger Deploy Service to Production
-      #   #uses: trstringer/manual-approval@v1
-      #   uses: olli-ai/manual-approval-action@master
-      #   timeout-minutes: 1
-      #   with:
-      #     secret: ${{ secrets.TOKEN }}
-      #     approvers: ${{ inputs.approvers }}
-      #     minimum-approvals: 1
-      
-      - name: Change Tag Image Production
-        env:
-          TAG: ${{steps.version.outputs.version}}
-        run: |
-          docker pull ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} 
+          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker tag ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
-          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
-    # outputs:
-    #   output1: ${{ steps.version.outputs.version }}
-      
-  PRODUCTION:
-    if: github.ref == 'refs/heads/production'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Generate Tag Version
-        id: version
-        uses: paulhatch/semantic-version@v4.0.2
-        with:
-          bump_each_commit: true
-
-      - name: Create ECR repository
-        run: |
-          aws --region us-east-1 ecr describe-repositories \
-          --repository-names ${{env.ENV_PROD}}/${{env.IMAGE_NAME}} || \
-          aws --region us-east-1 ecr create-repository \
-          --repository-name ${{env.ENV_PROD}}/${{env.IMAGE_NAME}}
-
-      - name: Get latest image
-        env:        
-          TAG: latest
-          NEW_TAG: ${{steps.version.outputs.version}}
-        run: |
-          docker pull ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker tag ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.NEW_TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.NEW_TAG}}
 
       - name: Helm Deploy Service on Production
         id: 'helm-prod'
         env:
           TAG: ${{steps.version.outputs.version}}
         run: |
-          aws --region us-east-1 eks update-kubeconfig --region us-east-1 --name ${{env.EKS_CLUSTER}}
+          aws --region ${{env.AWS_REGION}} eks update-kubeconfig --region ${{env.AWS_REGION}} --name ${{env.EKS_CLUSTER}}
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
@@ -359,7 +255,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy Service Production: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on Production US-AWS: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
@@ -372,6 +268,6 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy Service Production: ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Status Deploy on Production US-AWS: ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
