@@ -438,13 +438,9 @@ jobs:
           SLACK_COLOR: ${{ (needs.deploy-us-east-1-staging.result == 'success' && needs.deploy-ap-southeast-1-staging.result == 'success') && 'good' || (needs.deploy-us-east-1-staging.result == 'failure' || needs.deploy-ap-southeast-1-staging.result == 'failure') && 'danger' || 'warning' }}
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: |
-            - Regional Configuration:
-            • US-East-1: values-staging-us.yaml
-            • AP-Southeast-1: values-staging-ap.yaml
-
             - Deployment Results:
-            • US-East-1: ${{ needs.deploy-us-east-1-staging.result == 'success' && ':white_check_mark: Success' || needs.deploy-us-east-1-staging.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
-            • AP-Southeast-1: ${{ needs.deploy-ap-southeast-1-staging.result == 'success' && ':white_check_mark: Success' || needs.deploy-ap-southeast-1-staging.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
+            • US-East-1: ${{ needs.deploy-us-east-1-staging.result == 'success' && ' Success' || needs.deploy-us-east-1-staging.result == 'failure' && ' Failed' || ' Skipped' }}
+            • AP-Southeast-1: ${{ needs.deploy-ap-southeast-1-staging.result == 'success' && ' Success' || needs.deploy-ap-southeast-1-staging.result == 'failure' && ' Failed' || ' Skipped' }}
           SLACK_TITLE: 'Multi-Region Deployment Complete Staging - ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
@@ -595,13 +591,9 @@ jobs:
           SLACK_COLOR: ${{ (needs.deploy-us-east-1-production.result == 'success' && needs.deploy-ap-southeast-1-production.result == 'success') && 'good' || (needs.deploy-us-east-1-production.result == 'failure' || needs.deploy-ap-southeast-1-production.result == 'failure') && 'danger' || 'warning' }}
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: |
-            - Regional Configuration:
-            • US-East-1: values-production-us.yaml
-            • AP-Southeast-1: values-production-ap.yaml
-
             - Deployment Results:
-            • US-East-1: ${{ needs.deploy-us-east-1-production.result == 'success' && ':white_check_mark: Success' || needs.deploy-us-east-1-production.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
-            • AP-Southeast-1: ${{ needs.deploy-ap-southeast-1-production.result == 'success' && ':white_check_mark: Success' || needs.deploy-ap-southeast-1-production.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
+            • US-East-1: ${{ needs.deploy-us-east-1-production.result == 'success' && ' Success' || needs.deploy-us-east-1-production.result == 'failure' && ' Failed' || ' Skipped' }}
+            • AP-Southeast-1: ${{ needs.deploy-ap-southeast-1-production.result == 'success' && ' Success' || needs.deploy-ap-southeast-1-production.result == 'failure' && ' Failed' || ' Skipped' }}
           SLACK_TITLE: 'Multi-Region Deployment Complete Production - ${{ env.APP_NAME }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
