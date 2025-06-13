@@ -369,7 +369,7 @@ jobs:
           fi
           
           helm pull oci://${{ env.REGISTRY_US }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }}-us oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
+          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
             --install \
             --wait \
             -f values-stg-us-east.yaml \
@@ -412,7 +412,7 @@ jobs:
           fi
           
           helm pull oci://${{ env.REGISTRY_AP }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }}-ap oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
+          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
             --install \
             --wait \
             -f values-stg-ap-southeast.yaml \
