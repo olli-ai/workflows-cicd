@@ -428,7 +428,7 @@ jobs:
 
   # Final summary notification
   deployment-summary-staging:
-    needs: [build-and-push-staging, deploy-us-east-1-staging, deploy-ap-southeast-1-staging]
+    needs: [deploy-us-east-1-staging, deploy-ap-southeast-1-staging]
     runs-on: ubuntu-latest
     steps:
       - name: Multi-Region Deployment Summary
@@ -581,7 +581,7 @@ jobs:
 
   # Final summary notification
   deployment-summary-production:
-    needs: [build-and-push-production, deploy-us-east-1-production, deploy-ap-southeast-1-production]
+    needs: [deploy-us-east-1-production, deploy-ap-southeast-1-production]
     runs-on: ubuntu-latest
     steps:
       - name: Multi-Region Deployment Summary
