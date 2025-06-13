@@ -430,6 +430,7 @@ jobs:
   deployment-summary-staging:
     needs: [deploy-us-east-1-staging, deploy-ap-southeast-1-staging]
     runs-on: ubuntu-latest
+    if: always()
     steps:
       - name: Multi-Region Deployment Summary
         uses: olli-ai/slack-notify-action-gke@master
@@ -584,6 +585,7 @@ jobs:
   deployment-summary-production:
     needs: [deploy-us-east-1-production, deploy-ap-southeast-1-production]
     runs-on: ubuntu-latest
+    if: always()
     steps:
       - name: Multi-Region Deployment Summary
         uses: olli-ai/slack-notify-action-gke@master
