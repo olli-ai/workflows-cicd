@@ -147,7 +147,7 @@ jobs:
           
           # Deploy with Helm using US-specific values
           helm pull oci://${{ env.REGISTRY_US }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }}-us oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
+          helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
             --install \
             --wait \
             -f values-dev-us-east.yaml \
@@ -220,7 +220,7 @@ jobs:
           
           # Deploy with Helm using AP-specific values
           helm pull oci://${{ env.REGISTRY_AP }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }}-ap oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
+          helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
             --install \
             --wait \
             -f values-dev-ap-southeast.yaml \
@@ -505,7 +505,7 @@ jobs:
           fi
           
           helm pull oci://${{ env.REGISTRY_US }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }}-us oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
+          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
             --install \
             --wait \
             -f values-prod-us-east.yaml \
@@ -547,7 +547,7 @@ jobs:
           fi
           
           helm pull oci://${{ env.REGISTRY_AP }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }}-ap oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
+          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
             --install \
             --wait \
             -f values-prod-ap-southeast.yaml \
