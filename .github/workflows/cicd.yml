@@ -131,7 +131,7 @@ jobs:
         env:
           TAG: ${{ needs.build-and-push.outputs.version }}
         run: |
-          echo "Deploying to US-East-1 cluster with values-dev-us-east.yaml..."
+          echo "Deploying to US-East-1 cluster with values-dev-us.yaml..."
           aws --region us-east-1 eks update-kubeconfig --region us-east-1 --name ${{ env.EKS_CLUSTER_US }}
           
           # Install Helm
@@ -140,8 +140,8 @@ jobs:
           bash get_helm.sh
           
           # Verify values file exists
-          if [ ! -f "values-dev-us-east.yaml" ]; then
-            echo "Error: values-dev-us-east.yaml not found!"
+          if [ ! -f "values-dev-us.yaml" ]; then
+            echo "Error: values-dev-us.yaml not found!"
             exit 1
           fi
           
@@ -150,7 +150,7 @@ jobs:
           helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
             --install \
             --wait \
-            -f values-dev-us-east.yaml \
+            -f values-dev-us.yaml \
             --set tagImage=${{ env.TAG }} \
             --set region=us-east-1 \
             --atomic \
@@ -176,7 +176,7 @@ jobs:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: danger
           SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':x: Deployment failed in US-East-1. Check values-dev-us-east.yaml and configuration.'
+          SLACK_MESSAGE: ':x: Deployment failed in US-East-1. Check values-dev-us.yaml and configuration.'
           SLACK_TITLE: 'Deploy Failed - US-East-1: ${{ env.APP_NAME }} v${{ needs.build-and-push.outputs.version }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
@@ -204,7 +204,7 @@ jobs:
         env:
           TAG: ${{ needs.build-and-push.outputs.version }}
         run: |
-          echo "Deploying to AP-Southeast-1 cluster with values-dev-ap-southeast.yaml..."
+          echo "Deploying to AP-Southeast-1 cluster with values-dev-ap.yaml..."
           aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{ env.EKS_CLUSTER_AP }}
           
           # Install Helm
@@ -213,8 +213,8 @@ jobs:
           bash get_helm.sh
           
           # Verify values file exists
-          if [ ! -f "values-dev-ap-southeast.yaml" ]; then
-            echo "Error: values-dev-ap-southeast.yaml not found!"
+          if [ ! -f "values-dev-ap.yaml" ]; then
+            echo "Error: values-dev-ap.yaml not found!"
             exit 1
           fi
           
@@ -223,7 +223,7 @@ jobs:
           helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
             --install \
             --wait \
-            -f values-dev-ap-southeast.yaml \
+            -f values-dev-ap.yaml \
             --set tagImage=${{ env.TAG }} \
             --set region=ap-southeast-1 \
             --atomic \
@@ -249,7 +249,7 @@ jobs:
           SLACK_CHANNEL: alert-services
           SLACK_COLOR: danger
           SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':x: Deployment failed in AP-Southeast-1. Check values-dev-ap-southeast.yaml and configuration.'
+          SLACK_MESSAGE: ':x: Deployment failed in AP-Southeast-1. Check values-dev-ap.yaml and configuration.'
           SLACK_TITLE: 'Deploy Failed - AP-Southeast-1: ${{ env.APP_NAME }} v${{ needs.build-and-push.outputs.version }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
@@ -274,8 +274,8 @@ jobs:
 #            **Environment:** Development
 #
 #            **Regional Configuration:**
-#            • US-East-1: values-dev-us-east.yaml
-#            • AP-Southeast-1: values-dev-ap-southeast.yaml
+#            • US-East-1: values-dev-us.yaml
+#            • AP-Southeast-1: values-dev-ap.yaml
 #
 #            **Deployment Results:**
 #            • US-East-1: ${{ needs.deploy-us-east-1.result == 'success' && ':white_check_mark: Success' || needs.deploy-us-east-1.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
@@ -363,8 +363,8 @@ jobs:
           bash get_helm.sh
           
           # Verify staging values file exists
-          if [ ! -f "values-stg-us-east.yaml" ]; then
-            echo "Error: values-stg-us-east.yaml not found!"
+          if [ ! -f "values-staging-us.yaml" ]; then
+            echo "Error: values-staging-us.yaml not found!"
             exit 1
           fi
           
@@ -372,7 +372,7 @@ jobs:
           helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
             --install \
             --wait \
-            -f values-stg-us-east.yaml \
+            -f values-staging-us.yaml \
             --set tagImage=${{ env.TAG }} \
             --set region=us-east-1 \
             --atomic \
@@ -406,8 +406,8 @@ jobs:
           bash get_helm.sh
           
           # Verify staging values file exists
-          if [ ! -f "values-stg-ap-southeast.yaml" ]; then
-            echo "Error: values-stg-ap-southeast.yaml not found!"
+          if [ ! -f "values-staging-ap.yaml" ]; then
+            echo "Error: values-staging-ap.yaml not found!"
             exit 1
           fi
           
@@ -415,7 +415,7 @@ jobs:
           helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
             --install \
             --wait \
-            -f values-stg-ap-southeast.yaml \
+            -f values-staging-ap.yaml \
             --set tagImage=${{ env.TAG }} \
             --set region=ap-southeast-1 \
             --atomic \
@@ -499,8 +499,8 @@ jobs:
           bash get_helm.sh
           
           # Verify production values file exists
-          if [ ! -f "values-prod-us-east.yaml" ]; then
-            echo "Error: values-prod-us-east.yaml not found!"
+          if [ ! -f "values-production-us.yaml" ]; then
+            echo "Error: values-production-us.yaml not found!"
             exit 1
           fi
           
@@ -508,7 +508,7 @@ jobs:
           helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
             --install \
             --wait \
-            -f values-prod-us-east.yaml \
+            -f values-production-us.yaml \
             --set tagImage=${{ env.TAG }} \
             --set region=us-east-1 \
             --atomic \
@@ -541,8 +541,8 @@ jobs:
           bash get_helm.sh
           
           # Verify production values file exists
-          if [ ! -f "values-prod-ap-southeast.yaml" ]; then
-            echo "Error: values-prod-ap-southeast.yaml not found!"
+          if [ ! -f "values-production-ap.yaml" ]; then
+            echo "Error: values-production-ap.yaml not found!"
             exit 1
           fi
           
@@ -550,7 +550,7 @@ jobs:
           helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
             --install \
             --wait \
-            -f values-prod-ap-southeast.yaml \
+            -f values-production-ap.yaml \
             --set tagImage=${{ env.TAG }} \
             --set region=ap-southeast-1 \
             --atomic \
