@@ -18,12 +18,14 @@ on:
         required: true
 
 env:
-  EKS_CLUSTER: buddyos
-  AWS_REGION: us-east-1
-  REGISTRY: 905418372464.dkr.ecr.us-east-1.amazonaws.com
+  # Cluster configurations
+  EKS_CLUSTER_US: buddyos
+  EKS_CLUSTER_AP: eks-primary-prod-01  # Use same cluster name or change if different
+  REGISTRY_US: 905418372464.dkr.ecr.us-east-1.amazonaws.com
+  REGISTRY_AP: 905418372464.dkr.ecr.ap-southeast-1.amazonaws.com
   IMAGE_NAME: ${{ inputs.imageName }}
   ENV_DEV: dev
-  ENV_STG: stg 
+  ENV_STG: stg
   ENV_PRE-PROD: uat
   ENV_PROD: prod
   # CD
@@ -35,104 +37,18 @@ env:
   NAMESPACE_PROD: "service-production"
 
 jobs:
-  DEV:
-    if: github.ref == 'refs/heads/dev-us'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          submodules: true # Automatically initializes and updates submodules
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{env.AWS_REGION}}
-
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Generate Tag Version
-        id: version
-        uses: paulhatch/semantic-version@v4.0.2
-        with:
-          bump_each_commit: true
-
-      - name: Create ECR repository
-        run: |
-          aws --region ${{env.AWS_REGION}} ecr describe-repositories \
-          --repository-names ${{env.ENV_DEV}}/${{env.IMAGE_NAME}} || \
-          aws --region ${{env.AWS_REGION}} ecr create-repository \
-          --repository-name ${{env.ENV_DEV}}/${{env.IMAGE_NAME}}
-
-      - name: Build & Tag & Push Docker image
-        env:
-          TAG: ${{steps.version.outputs.version}}
-        run: |
-          DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-
-      - name: Helm Deploy Service on dev
-        id: 'helm-dev'
-        env:
-          TAG: ${{steps.version.outputs.version}}
-        run: |
-          aws --region ${{env.AWS_REGION}} eks update-kubeconfig --region ${{env.AWS_REGION}} --name ${{env.EKS_CLUSTER}}
-          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-          chmod 700 get_helm.sh
-          bash get_helm.sh
-          helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-dev.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
-            
-      - name: Slack Notification Success
-        if: ${{ success() }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action-gke@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy on Dev US-AWS: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
-      - name: Slack Notification Failed
-        if: ${{ failure() && steps.helm-dev.conclusion == 'failure' }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action-gke@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy on Dev US-AWS: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-     
-  STAGING:
+  # Build and push to both regions
+  build-and-push:
     if: github.ref == 'refs/heads/master-us'
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          submodules: true # Automatically initializes and updates submodules
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{env.AWS_REGION}}
-
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
+          submodules: true
 
       - name: Generate Tag Version
         id: version
@@ -140,134 +56,322 @@ jobs:
         with:
           bump_each_commit: true
 
-      - name: Create ECR repository
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Build Docker image
+        env:
+          TAG: ${{ steps.version.outputs.version }}
         run: |
-          aws --region ${{env.AWS_REGION}} ecr describe-repositories \
-          --repository-names ${{env.ENV_STG}}/${{env.IMAGE_NAME}} || \
-          aws --region ${{env.AWS_REGION}} ecr create-repository \
-          --repository-name ${{env.ENV_STG}}/${{env.IMAGE_NAME}}
+          echo "Building Docker image with tag: $TAG"
+          DOCKER_BUILDKIT=0 docker build -t ${{ env.IMAGE_NAME }}:${{ env.TAG }} .
 
-      - name: Build & Tag & Push Docker image
+      # Push to US-East-1 ECR
+      - name: Push to US ECR Registry
         env:
-          TAG: ${{steps.version.outputs.version}}
+          TAG: ${{ steps.version.outputs.version }}
         run: |
-          DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          echo "Pushing to US ECR Registry..."
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_US }}
+          
+          # Create repository if it doesn't exist
+          aws --region us-east-1 ecr describe-repositories \
+          --repository-names ${{ env.ENV_DEV }}/${{ env.IMAGE_NAME }} || \
+          aws --region us-east-1 ecr create-repository \
+          --repository-name ${{ env.ENV_DEV }}/${{ env.IMAGE_NAME }}
+          
+          # Tag and push to US registry
+          docker tag ${{ env.IMAGE_NAME }}:${{ env.TAG }} ${{ env.REGISTRY_US }}/${{ env.ENV_DEV }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          docker push ${{ env.REGISTRY_US }}/${{ env.ENV_DEV }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          echo "Successfully pushed to US registry"
 
-      - name: Helm Deploy Service on staging
-        id: 'helm-stg'
+      # Push to AP-Southeast-1 ECR
+      - name: Push to AP ECR Registry
         env:
-          TAG: ${{steps.version.outputs.version}}
+          TAG: ${{ steps.version.outputs.version }}
         run: |
-          aws --region ${{env.AWS_REGION}} eks update-kubeconfig --region ${{env.AWS_REGION}} --name ${{env.EKS_CLUSTER}}
-          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-          chmod 700 get_helm.sh
-          bash get_helm.sh
-          helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-stg.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+          echo "Pushing to AP ECR Registry..."
+          aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_AP }}
+          
+          # Create repository if it doesn't exist
+          aws --region ap-southeast-1 ecr describe-repositories \
+          --repository-names ${{ env.ENV_DEV }}/${{ env.IMAGE_NAME }} || \
+          aws --region ap-southeast-1 ecr create-repository \
+          --repository-name ${{ env.ENV_DEV }}/${{ env.IMAGE_NAME }}
+          
+          # Tag and push to AP registry
+          docker tag ${{ env.IMAGE_NAME }}:${{ env.TAG }} ${{ env.REGISTRY_AP }}/${{ env.ENV_DEV }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          docker push ${{ env.REGISTRY_AP }}/${{ env.ENV_DEV }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          echo "Successfully pushed to AP registry"
 
-      - name: Slack Notification Success
-        if: ${{ success() }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action-gke@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy on Staging US-AWS: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
-      - name: Slack Notification Failed
-        if: ${{ failure() && steps.helm-stg.conclusion == 'failure' }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action-gke@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy on Staging US-AWS: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-
-      
-  PRODUCTION:
-    if: github.ref == 'refs/heads/production-us'
+  # Deploy to US-East-1 cluster
+  deploy-us-east-1:
+    needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          submodules: true
 
-      - name: Configure AWS Credentials
+      - name: Configure AWS Credentials for US
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{env.AWS_REGION}}
+          aws-region: us-east-1
 
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Generate Tag Version
-        id: version
-        uses: paulhatch/semantic-version@v4.0.2
-        with:
-          bump_each_commit: true
-
-      - name: Create ECR repository
-        run: |
-          aws --region ${{env.AWS_REGION}} ecr describe-repositories \
-          --repository-names ${{env.ENV_PROD}}/${{env.IMAGE_NAME}} || \
-          aws --region ${{env.AWS_REGION}} ecr create-repository \
-          --repository-name ${{env.ENV_PROD}}/${{env.IMAGE_NAME}}
-
-      - name: Build & Tag & Push Docker image
+      - name: Deploy to US-East-1 EKS Cluster
+        id: 'helm-us'
         env:
-          TAG: ${{steps.version.outputs.version}}
+          TAG: ${{ needs.build-and-push.outputs.version }}
         run: |
-          DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-
-      - name: Helm Deploy Service on Production
-        id: 'helm-prod'
-        env:
-          TAG: ${{steps.version.outputs.version}}
-        run: |
-          aws --region ${{env.AWS_REGION}} eks update-kubeconfig --region ${{env.AWS_REGION}} --name ${{env.EKS_CLUSTER}}
+          echo "Deploying to US-East-1 cluster..."
+          aws --region us-east-1 eks update-kubeconfig --region us-east-1 --name ${{ env.EKS_CLUSTER_US }}
+          
+          # Install Helm
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           bash get_helm.sh
-          helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-prod.yaml --set tagImage=${{env.TAG}} --atomic --timeout 10m0s
+          
+          # Deploy with Helm
+          helm pull oci://${{ env.REGISTRY_US }}/helm-chart/all-service
+          helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }}-us oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
+            --install \
+            --wait \
+            -f values-dev.yaml \
+            --set tagImage=${{ env.TAG }} \
+            --set region=us-east-1 \
+            --atomic \
+            --timeout 10m0s
+          echo "Successfully deployed to US-East-1"
 
-      - name: Slack Notification Success
+      - name: Slack Notification - US Success
         if: ${{ success() }}
-        #uses: rtCamp/action-slack-notify@v2
         uses: olli-ai/slack-notify-action-gke@master
         env:
           SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_COLOR: good
           SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy on Production US-AWS: ${{ env.APP_NAME }}'
+          SLACK_MESSAGE: ':white_check_mark: Deployment completed successfully in US-East-1'
+          SLACK_TITLE: 'Deploy Success - US-East-1: ${{ env.APP_NAME }} v${{ needs.build-and-push.outputs.version }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
-      - name: Slack Notification Failed
-        if: ${{ failure() && steps.helm-prod.conclusion == 'failure' }}
-        #uses: rtCamp/action-slack-notify@v2
+      - name: Slack Notification - US Failed
+        if: ${{ failure() }}
         uses: olli-ai/slack-notify-action-gke@master
         env:
           SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_COLOR: danger
           SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy on Production US-AWS: ${{ env.APP_NAME }}'
+          SLACK_MESSAGE: ':x: Deployment failed in US-East-1'
+          SLACK_TITLE: 'Deploy Failed - US-East-1: ${{ env.APP_NAME }} v${{ needs.build-and-push.outputs.version }}'
           SLACK_USERNAME: devops
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+  # Deploy to AP-Southeast-1 cluster
+  deploy-ap-southeast-1:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Configure AWS Credentials for AP
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-1
+
+      - name: Deploy to AP-Southeast-1 EKS Cluster
+        id: 'helm-ap'
+        env:
+          TAG: ${{ needs.build-and-push.outputs.version }}
+        run: |
+          echo "Deploying to AP-Southeast-1 cluster..."
+          aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{ env.EKS_CLUSTER_AP }}
+          
+          # Install Helm
+          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+          chmod 700 get_helm.sh
+          bash get_helm.sh
+          
+          # Deploy with Helm
+          helm pull oci://${{ env.REGISTRY_AP }}/helm-chart/all-service
+          helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }}-ap oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
+            --install \
+            --wait \
+            -f values-dev.yaml \
+            --set tagImage=${{ env.TAG }} \
+            --set region=ap-southeast-1 \
+            --atomic \
+            --timeout 10m0s
+          echo "Successfully deployed to AP-Southeast-1"
+
+      - name: Slack Notification - AP Success
+        if: ${{ success() }}
+        uses: olli-ai/slack-notify-action-gke@master
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: good
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':white_check_mark: Deployment completed successfully in AP-Southeast-1'
+          SLACK_TITLE: 'Deploy Success - AP-Southeast-1: ${{ env.APP_NAME }} v${{ needs.build-and-push.outputs.version }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Slack Notification - AP Failed
+        if: ${{ failure() }}
+        uses: olli-ai/slack-notify-action-gke@master
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: danger
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: ':x: Deployment failed in AP-Southeast-1'
+          SLACK_TITLE: 'Deploy Failed - AP-Southeast-1: ${{ env.APP_NAME }} v${{ needs.build-and-push.outputs.version }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+  # Final summary notification
+  deployment-summary:
+    needs: [build-and-push, deploy-us-east-1, deploy-ap-southeast-1]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Multi-Region Deployment Summary
+        uses: olli-ai/slack-notify-action-gke@master
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ (needs.deploy-us-east-1.result == 'success' && needs.deploy-ap-southeast-1.result == 'success') && 'good' || (needs.deploy-us-east-1.result == 'failure' || needs.deploy-ap-southeast-1.result == 'failure') && 'danger' || 'warning' }}
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: |
+            :globe_with_meridians: **Multi-Region Deployment Summary**
+            
+            **Application:** ${{ env.APP_NAME }}
+            **Version:** ${{ needs.build-and-push.outputs.version }}
+            **Environment:** Development
+            
+            **Deployment Results:**
+            • US-East-1: ${{ needs.deploy-us-east-1.result == 'success' && ':white_check_mark: Success' || needs.deploy-us-east-1.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
+            • AP-Southeast-1: ${{ needs.deploy-ap-southeast-1.result == 'success' && ':white_check_mark: Success' || needs.deploy-ap-southeast-1.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
+          SLACK_TITLE: 'Multi-Region Deployment Complete - ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+  # Add staging jobs for multi-region deployment
+#  build-and-push-staging:
+#    if: github.ref == 'refs/heads/stg-us'
+#    runs-on: ubuntu-latest
+#    outputs:
+#      version: ${{ steps.version.outputs.version }}
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v3
+#        with:
+#          fetch-depth: 0
+#          submodules: true
+#
+#      - name: Generate Tag Version
+#        id: version
+#        uses: paulhatch/semantic-version@v4.0.2
+#        with:
+#          bump_each_commit: true
+#
+#      - name: Configure AWS Credentials
+#        uses: aws-actions/configure-aws-credentials@v4
+#        with:
+#          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          aws-region: us-east-1
+#
+#      - name: Build Docker image
+#        env:
+#          TAG: ${{ steps.version.outputs.version }}
+#        run: |
+#          echo "Building Docker image for staging with tag: $TAG"
+#          DOCKER_BUILDKIT=0 docker build -t ${{ env.IMAGE_NAME }}:${{ env.TAG }} .
+#
+#      - name: Push to US ECR Registry (Staging)
+#        env:
+#          TAG: ${{ steps.version.outputs.version }}
+#        run: |
+#          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_US }}
+#          aws --region us-east-1 ecr describe-repositories --repository-names ${{ env.ENV_STG }}/${{ env.IMAGE_NAME }} || aws --region us-east-1 ecr create-repository --repository-name ${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}
+#          docker tag ${{ env.IMAGE_NAME }}:${{ env.TAG }} ${{ env.REGISTRY_US }}/${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+#          docker push ${{ env.REGISTRY_US }}/${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+#
+#      - name: Push to AP ECR Registry (Staging)
+#        env:
+#          TAG: ${{ steps.version.outputs.version }}
+#        run: |
+#          aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_AP }}
+#          aws --region ap-southeast-1 ecr describe-repositories --repository-names ${{ env.ENV_STG }}/${{ env.IMAGE_NAME }} || aws --region ap-southeast-1 ecr create-repository --repository-name ${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}
+#          docker tag ${{ env.IMAGE_NAME }}:${{ env.TAG }} ${{ env.REGISTRY_AP }}/${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+#          docker push ${{ env.REGISTRY_AP }}/${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+#
+#  deploy-staging-us:
+#    needs: build-and-push-staging
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v3
+#        with:
+#          fetch-depth: 0
+#          submodules: true
+#
+#      - name: Configure AWS Credentials for US
+#        uses: aws-actions/configure-aws-credentials@v4
+#        with:
+#          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          aws-region: us-east-1
+#
+#      - name: Deploy to US-East-1 EKS Cluster (Staging)
+#        env:
+#          TAG: ${{ needs.build-and-push-staging.outputs.version }}
+#        run: |
+#          aws --region us-east-1 eks update-kubeconfig --region us-east-1 --name ${{ env.EKS_CLUSTER_US }}
+#          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+#          chmod 700 get_helm.sh
+#          bash get_helm.sh
+#          helm pull oci://${{ env.REGISTRY_US }}/helm-chart/all-service
+#          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }}-us oci://${{ env.REGISTRY_US }}/helm-chart/all-service --install --wait -f values-stg.yaml --set tagImage=${{ env.TAG }} --set region=us-east-1 --atomic --timeout 10m0s
+#
+#  deploy-staging-ap:
+#    needs: build-and-push-staging
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v3
+#        with:
+#          fetch-depth: 0
+#          submodules: true
+#
+#      - name: Configure AWS Credentials for AP
+#        uses: aws-actions/configure-aws-credentials@v4
+#        with:
+#          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          aws-region: ap-southeast-1
+#
+#      - name: Deploy to AP-Southeast-1 EKS Cluster (Staging)
+#        env:
+#          TAG: ${{ needs.build-and-push-staging.outputs.version }}
+#        run: |
+#          aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{ env.EKS_CLUSTER_AP }}
+#          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+#          chmod 700 get_helm.sh
+#          bash get_helm.sh
+#          helm pull oci://${{ env.REGISTRY_AP }}/helm-chart/all-service
+#          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }}-ap oci://${{ env.REGISTRY_AP }}/helm-chart/all-service --install --wait -f values-stg.yaml --set tagImage=${{ env.TAG }} --set region=ap-southeast-1 --atomic --timeout 10m0s
+#
+  # Final summary notification
