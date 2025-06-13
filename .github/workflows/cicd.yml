@@ -37,6 +37,7 @@ env:
   NAMESPACE_PROD: "service-production"
 
 jobs:
+  # DEV
   # Build and push to both regions
   build-and-push-dev:
     if: github.ref == 'refs/heads/dev'
@@ -284,7 +285,8 @@ jobs:
 #          SLACK_USERNAME: devops
 #          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
-  # Staging jobs with region-specific values
+
+  # STAGING
   build-and-push-staging:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
@@ -420,8 +422,34 @@ jobs:
             --set region=ap-southeast-1 \
             --atomic \
             --timeout 10m0s
+          
+    
 
-  # Production jobs with region-specific values
+
+  # Final summary notification
+  deployment-summary-staging:
+    needs: [build-and-push-staging, deploy-us-east-1-staging, deploy-ap-southeast-1-staging]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Multi-Region Deployment Summary
+        uses: olli-ai/slack-notify-action-gke@master
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ (needs.deploy-us-east-1-staging.result == 'success' && needs.deploy-ap-southeast-1-staging.result == 'success') && 'good' || (needs.deploy-us-east-1-staging.result == 'failure' || needs.deploy-ap-southeast-1-staging.result == 'failure') && 'danger' || 'warning' }}
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: |
+            - Regional Configuration:
+            • US-East-1: values-staging-us.yaml
+            • AP-Southeast-1: values-staging-ap.yaml
+
+            - Deployment Results:
+            • US-East-1: ${{ needs.deploy-us-east-1-staging.result == 'success' && ':white_check_mark: Success' || needs.deploy-us-east-1-staging.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
+            • AP-Southeast-1: ${{ needs.deploy-ap-southeast-1-staging.result == 'success' && ':white_check_mark: Success' || needs.deploy-ap-southeast-1-staging.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
+          SLACK_TITLE: 'Multi-Region Deployment Complete Staging - ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+  # PRODUCTION
   build-and-push-production:
     if: github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
@@ -555,3 +583,27 @@ jobs:
             --set region=ap-southeast-1 \
             --atomic \
             --timeout 10m0s
+
+  # Final summary notification
+  deployment-summary-production:
+    needs: [ build-and-push-production, deploy-us-east-1-production, deploy-ap-southeast-1-production ]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Multi-Region Deployment Summary
+        uses: olli-ai/slack-notify-action-gke@master
+        env:
+          SLACK_CHANNEL: alert-services
+          SLACK_COLOR: ${{ (needs.deploy-us-east-1-production.result == 'success' && needs.deploy-ap-southeast-1-production.result == 'success') && 'good' || (needs.deploy-us-east-1-production.result == 'failure' || needs.deploy-ap-southeast-1-production.result == 'failure') && 'danger' || 'warning' }}
+          SLACK_LINK_NAMES: true
+          SLACK_MESSAGE: |
+            - Regional Configuration:
+            • US-East-1: values-production-us.yaml
+            • AP-Southeast-1: values-production-ap.yaml
+
+            - Deployment Results:
+            • US-East-1: ${{ needs.deploy-us-east-1-production.result == 'success' && ':white_check_mark: Success' || needs.deploy-us-east-1-production.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
+            • AP-Southeast-1: ${{ needs.deploy-ap-southeast-1-production.result == 'success' && ':white_check_mark: Success' || needs.deploy-ap-southeast-1-production.result == 'failure' && ':x: Failed' || ':warning: Skipped' }}
+          SLACK_TITLE: 'Multi-Region Deployment Complete Production - ${{ env.APP_NAME }}'
+          SLACK_USERNAME: devops
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
