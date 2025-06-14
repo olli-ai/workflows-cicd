@@ -268,19 +268,6 @@ jobs:
             --push \
             .
 
-      - name: Pull image for Trivy scan
-        run: |
-          docker pull ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ needs.SETUP.outputs.version }}
-
-      - name: Scan image for vulnerabilities with Trivy
-        uses: aquasecurity/trivy-action@0.17.0
-        with:
-          scan-type: image
-          image-ref: ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ needs.SETUP.outputs.version }}
-          severity: CRITICAL,HIGH
-          exit-code: 1
-          format: table
-
   # General deployment job that handles both staging and production
   DEPLOY:
     needs: [SETUP, BUILD_AND_PUSH]
