@@ -167,7 +167,7 @@ jobs:
           
           # Create JSON array for matrix strategy
           if [ ${#ENVIRONMENTS[@]} -gt 0 ]; then
-            ENVIRONMENTS_JSON=$(printf '%s\n' "${ENVIRONMENTS[@]}" | jq -R . | jq -s .)
+            ENVIRONMENTS_JSON=$(printf '%s\n' "${ENVIRONMENTS[@]}" | jq -R . | jq -s -c .)
             echo "environments-matrix=${ENVIRONMENTS_JSON}" >> $GITHUB_OUTPUT
             echo "environment=${ENVIRONMENTS[0]}" >> $GITHUB_OUTPUT
           else
