@@ -183,7 +183,7 @@ jobs:
           
           # Convert comma-separated regions to JSON array for matrix
           IFS=',' read -ra REGION_ARRAY <<< "$regions"
-          REGIONS_JSON=$(printf '%s\n' "${REGION_ARRAY[@]}" | jq -R . | jq -s .)
+          REGIONS_JSON=$(printf '%s\n' "${REGION_ARRAY[@]}" | jq -R . | jq -cs .)
           echo "regions-matrix=${REGIONS_JSON}" >> $GITHUB_OUTPUT
           
           # Create region configuration JSON
