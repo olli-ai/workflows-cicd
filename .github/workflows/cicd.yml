@@ -455,13 +455,11 @@ jobs:
           SLACK_COLOR: ${{ steps.results.outputs.overall_status }}
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: |
-            - Environments: ${{ needs.SETUP.outputs.environments-matrix }}
-            - Deployment Status:
-            ${{ needs.SETUP.outputs.deploy-staging == 'true' && 'Staging' || '' }}
+            - Environments: ${{ needs.SETUP.outputs.deploy-staging == 'true' && 'Staging' || '' }}
             ${{ needs.SETUP.outputs.deploy-staging == 'true' && format('• {0}: {1}', env.PRIMARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
             ${{ needs.SETUP.outputs.deploy-staging == 'true' && format('• {0}: {1}', env.SECONDARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
             
-            ${{ needs.SETUP.outputs.deploy-production == 'true' && 'Production' || '' }}
+            - Environments: ${{ needs.SETUP.outputs.deploy-production == 'true' && 'Production' || '' }}
             ${{ needs.SETUP.outputs.deploy-production == 'true' && format('• {0}: {1}', env.PRIMARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
             ${{ needs.SETUP.outputs.deploy-production == 'true' && format('• {0}: {1}', env.SECONDARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
           SLACK_TITLE: 'Multi-Region Deployment - ${{ env.APP_NAME }}'
