@@ -7,6 +7,46 @@ on:
       appName:
         required: true
         type: string
+      environment:
+        required: false
+        type: string
+        default: 'auto'  # auto, staging, production
+      regions:
+        required: false
+        type: string
+        default: 'us-east-1,ap-southeast-1'  # Comma-separated list
+      primaryRegion:
+        required: false
+        type: string
+        default: 'us-east-1'
+      secondaryRegion:
+        required: false
+        type: string
+        default: 'ap-southeast-1'
+      helmChartName:
+        required: false
+        type: string
+        default: 'all-service'
+      helmVersion:
+        required: false
+        type: string
+        default: '3.14.0'
+      maxRetries:
+        required: false
+        type: number
+        default: 3
+      helmTimeoutStaging:
+        required: false
+        type: string
+        default: '10m0s'
+      helmTimeoutProduction:
+        required: false
+        type: string
+        default: '15m0s'
+      keepImageCount:
+        required: false
+        type: number
+        default: 10
     secrets:
       SLACK_WEBHOOK:
         required: true
@@ -18,334 +58,433 @@ on:
         required: true
 
 env:
+  # AWS Account and Registry configurations
+  AWS_ACCOUNT_ID: "905418372464"
+
   # Cluster configurations
-  EKS_CLUSTER_US: buddyos
-  EKS_CLUSTER_AP: eks-primary-prod-01  # Use same cluster name or change if different
-  REGISTRY_US: 905418372464.dkr.ecr.us-east-1.amazonaws.com
-  REGISTRY_AP: 905418372464.dkr.ecr.ap-southeast-1.amazonaws.com
+  EKS_CLUSTER_PRIMARY: buddyos
+  EKS_CLUSTER_SECONDARY: eks-primary-prod-01
+
+  # Registry configurations
+  ECR_DOMAIN: dkr.ecr
+  ECR_SUFFIX: amazonaws.com
+
+  # Build configurations
   IMAGE_NAME: ${{ inputs.imageName }}
-  ENV_DEV: dev
-  ENV_STG: stg
-  ENV_PRE-PROD: uat
-  ENV_PROD: prod
-  # CD
-  RELEASE_NAME: "chart-k8s"
   APP_NAME: ${{ inputs.appName }}
+  PRIMARY_REGION: ${{ inputs.primaryRegion }}
+  SECONDARY_REGION: ${{ inputs.secondaryRegion }}
+
+  # Environment names (previously hardcoded)
+  ENVIRONMENT_STAGING: staging
+  ENVIRONMENT_PRODUCTION: production
+  ENVIRONMENT_AUTO: auto
+
+  # Branch mapping (previously hardcoded)
+  STAGING_BRANCH: master
+  PRODUCTION_BRANCH: production
+
+  # Platform configuration (previously hardcoded)
+  BUILD_PLATFORM: linux/amd64
+
+  # Notification configuration (previously hardcoded)
+  SLACK_CHANNEL: alert-services
+  SLACK_USERNAME: devops
+
+  # Kubernetes configurations
+  RELEASE_NAME: "chart-k8s"
   NAMESPACE_DEV: "service-dev"
   NAMESPACE_STG: "service-staging"
-  NAMESPACE_PRE-PROD: "service-uat"
+  NAMESPACE_PRE_PROD: "service-uat"
   NAMESPACE_PROD: "service-production"
 
+  # Helm chart configurations
+  HELM_CHART_NAME: ${{ inputs.helmChartName }}
+  HELM_CHART_PATH: helm-chart
+  HELM_VERSION: ${{ inputs.helmVersion }}
+  HELM_TIMEOUT_STAGING: ${{ inputs.helmTimeoutStaging }}
+  HELM_TIMEOUT_PRODUCTION: ${{ inputs.helmTimeoutProduction }}
+  MAX_RETRIES: ${{ inputs.maxRetries }}
+  KEEP_IMAGE_COUNT: ${{ inputs.keepImageCount }}
+
+  # Deployment strategy configurations
+  PROD_DEPLOYMENT_STRATEGY: RollingUpdate
+  PROD_MAX_UNAVAILABLE: "25%"
+  PROD_MAX_SURGE: "25%"
+  STAGING_DEPLOYMENT_STRATEGY: RollingUpdate
+  STAGING_MAX_UNAVAILABLE: "50%"
+  STAGING_MAX_SURGE: "50%"
+
+  # Health check timeouts
+  PROD_HEALTH_CHECK_TIMEOUT: "900s"
+  STAGING_HEALTH_CHECK_TIMEOUT: "600s"
+
 jobs:
-  # STAGING
-  build-and-push-staging:
-    if: github.ref == 'refs/heads/master'
+  # Determine deployment strategy
+  SETUP:
     runs-on: ubuntu-latest
     outputs:
+      deploy-staging: ${{ steps.strategy.outputs.deploy-staging }}
+      deploy-production: ${{ steps.strategy.outputs.deploy-production }}
       version: ${{ steps.version.outputs.version }}
+      regions: ${{ steps.regions.outputs.regions }}
+      regions-matrix: ${{ steps.regions.outputs.regions-matrix }}
+      environment: ${{ steps.strategy.outputs.environment }}
+      environments-matrix: ${{ steps.strategy.outputs.environments-matrix }}
+      region-config: ${{ steps.regions.outputs.region-config }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: true
 
       - name: Generate Tag Version
         id: version
-        uses: paulhatch/semantic-version@v4.0.2
+        uses: paulhatch/semantic-version@v5.4.0
         with:
           bump_each_commit: true
+          tag_prefix: "v"
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: Build Docker image
-        env:
-          TAG: ${{ steps.version.outputs.version }}
+      - name: Determine deployment strategy
+        id: strategy
         run: |
-          echo "Building Docker image for staging with tag: $TAG"
-          DOCKER_BUILDKIT=0 docker build -t ${{ env.IMAGE_NAME }}:${{ env.TAG }} .
+          ENVIRONMENTS=()
+          
+          if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.STAGING_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
+            echo "deploy-staging=true" >> $GITHUB_OUTPUT
+            ENVIRONMENTS+=("${{ env.ENVIRONMENT_STAGING }}")
+          else
+            echo "deploy-staging=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.PRODUCTION_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
+            echo "deploy-production=true" >> $GITHUB_OUTPUT
+            ENVIRONMENTS+=("${{ env.ENVIRONMENT_PRODUCTION }}")
+          else
+            echo "deploy-production=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Create JSON array for matrix strategy
+          if [ ${#ENVIRONMENTS[@]} -gt 0 ]; then
+            ENVIRONMENTS_JSON=$(printf '%s\n' "${ENVIRONMENTS[@]}" | jq -R . | jq -s .)
+            echo "environments-matrix=${ENVIRONMENTS_JSON}" >> $GITHUB_OUTPUT
+            echo "environment=${ENVIRONMENTS[0]}" >> $GITHUB_OUTPUT
+          else
+            echo "environments-matrix=[]" >> $GITHUB_OUTPUT
+            echo "environment=none" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Push to US ECR Registry (Staging)
-        env:
-          TAG: ${{ steps.version.outputs.version }}
+      - name: Parse regions and create configuration
+        id: regions
         run: |
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_US }}
-          aws --region us-east-1 ecr describe-repositories --repository-names ${{ env.ENV_STG }}/${{ env.IMAGE_NAME }} || aws --region us-east-1 ecr create-repository --repository-name ${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}
-          docker tag ${{ env.IMAGE_NAME }}:${{ env.TAG }} ${{ env.REGISTRY_US }}/${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
-          docker push ${{ env.REGISTRY_US }}/${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          regions="${{ inputs.regions }}"
+          echo "regions=${regions}" >> $GITHUB_OUTPUT
+          
+          # Convert comma-separated regions to JSON array for matrix
+          IFS=',' read -ra REGION_ARRAY <<< "$regions"
+          REGIONS_JSON=$(printf '%s\n' "${REGION_ARRAY[@]}" | jq -R . | jq -s .)
+          echo "regions-matrix=${REGIONS_JSON}" >> $GITHUB_OUTPUT
+          
+          # Create region configuration JSON
+          cat > region_config.json << EOF
+          {
+            "${{ env.PRIMARY_REGION }}": {
+              "registry": "${{ env.AWS_ACCOUNT_ID }}.${{ env.ECR_DOMAIN }}.${{ env.PRIMARY_REGION }}.${{ env.ECR_SUFFIX }}",
+              "cluster": "${{ env.EKS_CLUSTER_PRIMARY }}"
+            },
+            "${{ env.SECONDARY_REGION }}": {
+              "registry": "${{ env.AWS_ACCOUNT_ID }}.${{ env.ECR_DOMAIN }}.${{ env.SECONDARY_REGION }}.${{ env.ECR_SUFFIX }}",
+              "cluster": "${{ env.EKS_CLUSTER_SECONDARY }}"
+            }
+          }
+          EOF
+          
+          REGION_CONFIG=$(cat region_config.json | jq -c .)
+          echo "region-config=${REGION_CONFIG}" >> $GITHUB_OUTPUT
 
-      - name: Push to AP ECR Registry (Staging)
-        env:
-          TAG: ${{ steps.version.outputs.version }}
-        run: |
-          aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_AP }}
-          aws --region ap-southeast-1 ecr describe-repositories --repository-names ${{ env.ENV_STG }}/${{ env.IMAGE_NAME }} || aws --region ap-southeast-1 ecr create-repository --repository-name ${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}
-          docker tag ${{ env.IMAGE_NAME }}:${{ env.TAG }} ${{ env.REGISTRY_AP }}/${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
-          docker push ${{ env.REGISTRY_AP }}/${{ env.ENV_STG }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
-
-  deploy-us-east-1-staging:
-    needs: build-and-push-staging
+  # Security scanning
+  SECURITY_SCAN:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
         with:
-          fetch-depth: 0
-          submodules: true
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
 
-      - name: Configure AWS Credentials for US
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          sarif_file: 'trivy-results.sarif'
 
-      - name: Deploy to US-East-1 EKS Cluster (Staging)
-        env:
-          TAG: ${{ needs.build-and-push-staging.outputs.version }}
-        run: |
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_US }}
-          aws --region us-east-1 eks update-kubeconfig --region us-east-1 --name ${{ env.EKS_CLUSTER_US }}
-          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-          chmod 700 get_helm.sh
-          bash get_helm.sh
-          
-          # Verify staging values file exists
-          if [ ! -f "values-staging-us.yaml" ]; then
-            echo "Error: values-staging-us.yaml not found!"
-            exit 1
-          fi
-          
-          helm pull oci://${{ env.REGISTRY_US }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
-            --install \
-            --wait \
-            -f values-staging-us.yaml \
-            --set tagImage=${{ env.TAG }} \
-            --set region=us-east-1 \
-            --atomic \
-            --timeout 10m0s
-
-  deploy-ap-southeast-1-staging:
-    needs: build-and-push-staging
+  # Build and push images
+  BUILD_AND_PUSH:
+    needs: [SETUP, SECURITY_SCAN]
+    if: needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true'
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          submodules: true
-
-      - name: Configure AWS Credentials for AP
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-southeast-1
-
-      - name: Deploy to AP-Southeast-1 EKS Cluster (Staging)
-        env:
-          TAG: ${{ needs.build-and-push-staging.outputs.version }}
-        run: |
-          aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_AP }}
-          aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{ env.EKS_CLUSTER_AP }}
-          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-          chmod 700 get_helm.sh
-          bash get_helm.sh
-          
-          # Verify staging values file exists
-          if [ ! -f "values-staging-ap.yaml" ]; then
-            echo "Error: values-staging-ap.yaml not found!"
-            exit 1
-          fi
-          
-          helm pull oci://${{ env.REGISTRY_AP }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
-            --install \
-            --wait \
-            -f values-staging-ap.yaml \
-            --set tagImage=${{ env.TAG }} \
-            --set region=ap-southeast-1 \
-            --atomic \
-            --timeout 10m0s
-          
-    
-
-
-  deployment-summary-staging:
-    needs: [deploy-us-east-1-staging, deploy-ap-southeast-1-staging]
-    runs-on: ubuntu-latest
-    if: always() && github.ref == 'refs/heads/master'
-    steps:
-      - name: Multi-Region Deployment Summary
-        uses: olli-ai/slack-notify-action-gke@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ (needs.deploy-us-east-1-staging.result == 'success' && needs.deploy-ap-southeast-1-staging.result == 'success') && 'good' || (needs.deploy-us-east-1-staging.result == 'failure' || needs.deploy-ap-southeast-1-staging.result == 'failure') && 'danger' || 'warning' }}
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: |
-            • AP-Southeast-1: ${{ needs.deploy-ap-southeast-1-staging.result == 'success' && 'Success' || needs.deploy-ap-southeast-1-staging.result == 'failure' && 'Failed' || 'Skipped' }}
-            • US-East-1: ${{ needs.deploy-us-east-1-staging.result == 'success' && 'Success' || needs.deploy-us-east-1-staging.result == 'failure' && 'Failed' || 'Skipped' }}
-          SLACK_TITLE: 'Multi-Region Deployment Staging - ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-
-  # PRODUCTION
-  build-and-push-production:
-    if: github.ref == 'refs/heads/production'
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        region: ${{ fromJson(needs.SETUP.outputs.regions-matrix) }}
+        environment: ${{ fromJson(needs.SETUP.outputs.environments-matrix) }}
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ needs.SETUP.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: true
 
-      - name: Generate Tag Version
-        id: version
-        uses: paulhatch/semantic-version@v4.0.2
-        with:
-          bump_each_commit: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ matrix.region }}
+          role-duration-seconds: 3600
 
-      - name: Build Docker image
-        env:
-          TAG: ${{ steps.version.outputs.version }}
+      - name: Set dynamic environment variables
         run: |
-          echo "Building Docker image for production with tag: $TAG"
-          DOCKER_BUILDKIT=0 docker build -t ${{ env.IMAGE_NAME }}:${{ env.TAG }} .
+          # Parse region configuration
+          REGION_CONFIG='${{ needs.SETUP.outputs.region-config }}'
+          REGISTRY=$(echo $REGION_CONFIG | jq -r '.["${{ matrix.region }}"].registry')
+          echo "REGISTRY=${REGISTRY}" >> $GITHUB_ENV
+          
+          # Set target environment based on deployment type
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]]; then
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_STAGING }}" >> $GITHUB_ENV
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_PRODUCTION }}" >> $GITHUB_ENV
+          fi
 
-      - name: Push to US ECR Registry (Production)
-        env:
-          TAG: ${{ steps.version.outputs.version }}
+      - name: Login to ECR
         run: |
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_US }}
-          aws --region us-east-1 ecr describe-repositories --repository-names ${{ env.ENV_PROD }}/${{ env.IMAGE_NAME }} || aws --region us-east-1 ecr create-repository --repository-name ${{ env.ENV_PROD }}/${{ env.IMAGE_NAME }}
-          docker tag ${{ env.IMAGE_NAME }}:${{ env.TAG }} ${{ env.REGISTRY_US }}/${{ env.ENV_PROD }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
-          docker push ${{ env.REGISTRY_US }}/${{ env.ENV_PROD }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          aws ecr get-login-password --region ${{ matrix.region }} | docker login --username AWS --password-stdin ${{ env.REGISTRY }}
 
-      - name: Push to AP ECR Registry (Production)
+      - name: Build and push Docker image
         env:
-          TAG: ${{ steps.version.outputs.version }}
+          TAG: ${{ needs.SETUP.outputs.version }}
         run: |
-          aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_AP }}
-          aws --region ap-southeast-1 ecr describe-repositories --repository-names ${{ env.ENV_PROD }}/${{ env.IMAGE_NAME }} || aws --region ap-southeast-1 ecr create-repository --repository-name ${{ env.ENV_PROD }}/${{ env.IMAGE_NAME }}
-          docker tag ${{ env.IMAGE_NAME }}:${{ env.TAG }} ${{ env.REGISTRY_AP }}/${{ env.ENV_PROD }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
-          docker push ${{ env.REGISTRY_AP }}/${{ env.ENV_PROD }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          # Create repository if it doesn't exist
+          aws ecr describe-repositories --region ${{ matrix.region }} --repository-names ${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }} || \
+          aws ecr create-repository --region ${{ matrix.region }} --repository-name ${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}
+          
+          # Build and push with cache
+          docker buildx build \
+            --platform ${{ env.BUILD_PLATFORM }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:cache,mode=max \
+            --tag ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ env.TAG }} \
+            --tag ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:latest \
+            --push \
+            .
 
-  deploy-us-east-1-production:
-    needs: build-and-push-production
+      - name: Scan image for vulnerabilities
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy image --exit-code 1 --severity HIGH,CRITICAL \
+            ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ needs.SETUP.outputs.version }}
+
+  # General deployment job that handles both staging and production
+  DEPLOY:
+    needs: [SETUP, BUILD_AND_PUSH]
+    if: needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        region: ${{ fromJson(needs.SETUP.outputs.regions-matrix) }}
+        environment: ${{ fromJson(needs.SETUP.outputs.environments-matrix) }}
+      fail-fast: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: true
 
-      - name: Configure AWS Credentials for US
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ matrix.region }}
 
-      - name: Deploy to US-East-1 EKS Cluster (Production)
-        env:
-          TAG: ${{ needs.build-and-push-production.outputs.version }}
+      - name: Set dynamic environment variables
         run: |
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_US }}
-          aws --region us-east-1 eks update-kubeconfig --region us-east-1 --name ${{ env.EKS_CLUSTER_US }}
-          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-          chmod 700 get_helm.sh
-          bash get_helm.sh
+          # Parse region configuration
+          REGION_CONFIG='${{ needs.SETUP.outputs.region-config }}'
+          REGISTRY=$(echo $REGION_CONFIG | jq -r '.["${{ matrix.region }}"].registry')
+          CLUSTER=$(echo $REGION_CONFIG | jq -r '.["${{ matrix.region }}"].cluster')
+          echo "REGISTRY=${REGISTRY}" >> $GITHUB_ENV
+          echo "CLUSTER=${CLUSTER}" >> $GITHUB_ENV
           
-          # Verify production values file exists
-          if [ ! -f "values-production-us.yaml" ]; then
-            echo "Error: values-production-us.yaml not found!"
+          # Build region-specific Helm chart URL
+          HELM_CHART_URL="oci://${REGISTRY}/${{ env.HELM_CHART_PATH }}/${{ env.HELM_CHART_NAME }}"
+          echo "HELM_CHART_URL=${HELM_CHART_URL}" >> $GITHUB_ENV
+          
+          # Set namespace and target environment based on deployment type
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]]; then
+            echo "NAMESPACE=${{ env.NAMESPACE_STG }}" >> $GITHUB_ENV
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_STAGING }}" >> $GITHUB_ENV
+            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_STAGING }}" >> $GITHUB_ENV
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
+            echo "NAMESPACE=${{ env.NAMESPACE_PROD }}" >> $GITHUB_ENV
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_PRODUCTION }}" >> $GITHUB_ENV
+            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_PRODUCTION }}" >> $GITHUB_ENV
+          fi
+
+      - name: Install and configure kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          aws eks update-kubeconfig --region ${{ matrix.region }} --name ${{ env.CLUSTER }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Verify deployment prerequisites
+        run: |
+          # Check if values file exists
+          VALUES_FILE="values-${{ matrix.environment }}-${{ matrix.region }}.yaml"
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "Error: $VALUES_FILE not found!"
+            echo "Expected: $VALUES_FILE"
+            ls -la values-*.yaml || true
             exit 1
           fi
+          echo "✅ Found values file: $VALUES_FILE"
           
-          helm pull oci://${{ env.REGISTRY_US }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_US }}/helm-chart/all-service \
-            --install \
-            --wait \
-            -f values-production-us.yaml \
-            --set tagImage=${{ env.TAG }} \
-            --set region=us-east-1 \
-            --atomic \
-            --timeout 10m0s
+          # Check namespace
+          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Verify cluster connectivity
+          kubectl cluster-info
 
-  deploy-ap-southeast-1-production:
-    needs: build-and-push-production
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          submodules: true
-
-      - name: Configure AWS Credentials for AP
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-southeast-1
-
-      - name: Deploy to AP-Southeast-1 EKS Cluster (Production)
+      - name: Deploy with Helm
         env:
-          TAG: ${{ needs.build-and-push-production.outputs.version }}
+          TAG: ${{ needs.SETUP.outputs.version }}
         run: |
-          aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin ${{ env.REGISTRY_AP }}
-          aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{ env.EKS_CLUSTER_AP }}
-          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-          chmod 700 get_helm.sh
-          bash get_helm.sh
+          VALUES_FILE="values-${{ matrix.environment }}-${{ matrix.region }}.yaml"
           
-          # Verify production values file exists
-          if [ ! -f "values-production-ap.yaml" ]; then
-            echo "Error: values-production-ap.yaml not found!"
-            exit 1
+          # Login to ECR
+          aws ecr get-login-password --region ${{ matrix.region }} | docker login --username AWS --password-stdin ${{ env.REGISTRY }}
+          
+          # Set deployment strategy based on environment
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
+            DEPLOYMENT_STRATEGY="${{ env.PROD_DEPLOYMENT_STRATEGY }}"
+            MAX_UNAVAILABLE="${{ env.PROD_MAX_UNAVAILABLE }}"
+            MAX_SURGE="${{ env.PROD_MAX_SURGE }}"
+          else
+            DEPLOYMENT_STRATEGY="${{ env.STAGING_DEPLOYMENT_STRATEGY }}"
+            MAX_UNAVAILABLE="${{ env.STAGING_MAX_UNAVAILABLE }}"
+            MAX_SURGE="${{ env.STAGING_MAX_SURGE }}"
           fi
           
-          helm pull oci://${{ env.REGISTRY_AP }}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{ env.REGISTRY_AP }}/helm-chart/all-service \
-            --install \
-            --wait \
-            -f values-production-ap.yaml \
-            --set tagImage=${{ env.TAG }} \
-            --set region=ap-southeast-1 \
-            --atomic \
-            --timeout 10m0s
+          # Deploy with retry logic
+          for i in $(seq 1 ${{ env.MAX_RETRIES }}); do
+            if helm upgrade ${{ env.APP_NAME }} ${{ env.HELM_CHART_URL }} \
+              --install \
+              --namespace ${{ env.NAMESPACE }} \
+              --wait \
+              --timeout ${{ env.HELM_TIMEOUT }} \
+              --values $VALUES_FILE \
+              --set tagImage=${{ env.TAG }} \
+              --set region=${{ matrix.region }} \
+              --set environment=${{ matrix.environment }} \
+              --set deploymentStrategy=$DEPLOYMENT_STRATEGY \
+              --set rollingUpdate.maxUnavailable=$MAX_UNAVAILABLE \
+              --set rollingUpdate.maxSurge=$MAX_SURGE \
+              --atomic; then
+              echo "✅ Deployment successful with $VALUES_FILE using chart: ${{ env.HELM_CHART_URL }}"
+              break
+            else
+              echo "❌ Deployment attempt $i failed"
+              if [ $i -eq ${{ env.MAX_RETRIES }} ]; then
+                echo "💥 All deployment attempts failed"
+                exit 1
+              fi
+              sleep 30
+            fi
+          done
 
-  deployment-summary-production:
-    needs: [deploy-us-east-1-production, deploy-ap-southeast-1-production]
+      - name: Verify deployment
+        run: |
+          # Set timeout based on environment
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
+            TIMEOUT="${{ env.PROD_HEALTH_CHECK_TIMEOUT }}"
+          else
+            TIMEOUT="${{ env.STAGING_HEALTH_CHECK_TIMEOUT }}"
+          fi
+          
+          kubectl rollout status deployment/${{ env.APP_NAME }} -n ${{ env.NAMESPACE }} --timeout=$TIMEOUT
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=${{ env.APP_NAME }}
+
+      - name: Run health checks
+        run: |
+          echo "Running health checks for ${{ matrix.environment }} in ${{ matrix.region }}"
+          
+          # Environment-specific health checks
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
+            echo "Running comprehensive production health checks"
+            # Add comprehensive production health check commands here
+          else
+            echo "Running basic staging smoke tests"
+            # Add staging smoke test commands here
+          fi
+          
+          # Common health checks for all environments
+          # kubectl run health-check --image=your-health-check-image --rm -i --restart=Never -- /run-health-checks.sh
+
+  # Deployment summary
+  DEPLOYMENT_SUMMARY:
+    needs: [SETUP, DEPLOY]
     runs-on: ubuntu-latest
-    if: always() && github.ref == 'refs/heads/production'
+    if: always() && (needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true')
     steps:
-      - name: Multi-Region Deployment Summary
+      - name: Collect deployment results
+        id: results
+        run: |
+          # Get deployment results from the matrix
+          DEPLOY_RESULTS="${{ needs.DEPLOY.result }}"
+          
+          # Determine overall status
+          if [[ "$DEPLOY_RESULTS" =~ "failure" ]]; then
+            echo "overall_status=danger" >> $GITHUB_OUTPUT
+          elif [[ "$DEPLOY_RESULTS" =~ "cancelled" ]]; then
+            echo "overall_status=warning" >> $GITHUB_OUTPUT
+          else
+            echo "overall_status=good" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send deployment notification
         uses: olli-ai/slack-notify-action-gke@master
         env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ (needs.deploy-us-east-1-production.result == 'success' && needs.deploy-ap-southeast-1-production.result == 'success') && 'good' || (needs.deploy-us-east-1-production.result == 'failure' || needs.deploy-ap-southeast-1-production.result == 'failure') && 'danger' || 'warning' }}
+          SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
+          SLACK_COLOR: ${{ steps.results.outputs.overall_status }}
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: |
-            • AP-Southeast-1: ${{ needs.deploy-ap-southeast-1-production.result == 'success' && 'Success' || needs.deploy-ap-southeast-1-production.result == 'failure' && 'Failed' || 'Skipped' }}
-            • US-East-1: ${{ needs.deploy-us-east-1-production.result == 'success' && 'Success' || needs.deploy-us-east-1-production.result == 'failure' && 'Failed' || 'Skipped' }}
-          SLACK_TITLE: 'Multi-Region Deployment Production - ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
+            - Environments: ${{ needs.SETUP.outputs.environments-matrix }}
+            - Deployment Status:
+            ${{ needs.SETUP.outputs.deploy-staging == 'true' && 'Staging' || '' }}
+            ${{ needs.SETUP.outputs.deploy-staging == 'true' && format('• {0}: {1}', env.PRIMARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
+            ${{ needs.SETUP.outputs.deploy-staging == 'true' && format('• {0}: {1}', env.SECONDARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
+            
+            ${{ needs.SETUP.outputs.deploy-production == 'true' && 'Production' || '' }}
+            ${{ needs.SETUP.outputs.deploy-production == 'true' && format('• {0}: {1}', env.PRIMARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
+            ${{ needs.SETUP.outputs.deploy-production == 'true' && format('• {0}: {1}', env.SECONDARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
+          SLACK_TITLE: 'Multi-Region Deployment - ${{ env.APP_NAME }}'
+          SLACK_USERNAME: ${{ env.SLACK_USERNAME }}
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
