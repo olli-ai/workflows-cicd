@@ -273,7 +273,7 @@ jobs:
           docker pull ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ needs.SETUP.outputs.version }}
 
       - name: Scan image for vulnerabilities with Trivy
-        uses: aquasecurity/trivy-action@v0.14.0
+        uses: aquasecurity/trivy-action@v0.16.0
         with:
           scan-type: image
           image-ref: ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ needs.SETUP.outputs.version }}
