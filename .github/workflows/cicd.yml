@@ -269,10 +269,12 @@ jobs:
             .
 
       - name: Scan image for vulnerabilities
-        run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy image --exit-code 1 --severity HIGH,CRITICAL \
-            ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ needs.SETUP.outputs.version }}
+        uses: aquasecurity/trivy-action@v0.14.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ needs.SETUP.outputs.version }}
+          severity: CRITICAL,HIGH
+          exit-code: 1
 
   # General deployment job that handles both staging and production
   DEPLOY:
