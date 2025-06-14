@@ -268,13 +268,18 @@ jobs:
             --push \
             .
 
-      - name: Scan image for vulnerabilities
+      - name: Pull image for Trivy scan
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ needs.SETUP.outputs.version }}
+
+      - name: Scan image for vulnerabilities with Trivy
         uses: aquasecurity/trivy-action@v0.14.0
         with:
           scan-type: image
           image-ref: ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ needs.SETUP.outputs.version }}
           severity: CRITICAL,HIGH
           exit-code: 1
+          format: table
 
   # General deployment job that handles both staging and production
   DEPLOY:
@@ -431,24 +436,44 @@ jobs:
 
   # Deployment summary
   DEPLOYMENT_SUMMARY:
-    needs: [SETUP, DEPLOY]
+    needs: [SETUP, BUILD_AND_PUSH,DEPLOY]
     runs-on: ubuntu-latest
     if: always() && (needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true')
     steps:
       - name: Collect deployment results
         id: results
         run: |
-          # Get deployment results from the matrix
-          DEPLOY_RESULTS="${{ needs.DEPLOY.result }}"
-          
-          # Determine overall status
-          if [[ "$DEPLOY_RESULTS" =~ "failure" ]]; then
-            echo "overall_status=danger" >> $GITHUB_OUTPUT
-          elif [[ "$DEPLOY_RESULTS" =~ "cancelled" ]]; then
-            echo "overall_status=warning" >> $GITHUB_OUTPUT
+          BUILD_RESULT="${{ needs.BUILD_AND_PUSH.result }}"
+          DEPLOY_RESULT="${{ needs.DEPLOY.result }}"
+
+          # Determine per-region deploy statuses
+          if [[ "$BUILD_RESULT" == "failure" ]]; then
+            PRIMARY_STATUS="Skipped (Build Failed)"
+            SECONDARY_STATUS="Skipped (Build Failed)"
           else
-            echo "overall_status=good" >> $GITHUB_OUTPUT
+            case "$DEPLOY_RESULT" in
+              success)
+                PRIMARY_STATUS="Success"
+                SECONDARY_STATUS="Success"
+                ;;
+              failure)
+                PRIMARY_STATUS="Failed"
+                SECONDARY_STATUS="Failed"
+                ;;
+              cancelled)
+                PRIMARY_STATUS="Cancelled"
+                SECONDARY_STATUS="Cancelled"
+                ;;
+              *)
+                PRIMARY_STATUS="Skipped"
+                SECONDARY_STATUS="Skipped"
+                ;;
+            esac
           fi
+
+          echo "primary_status=$PRIMARY_STATUS" >> $GITHUB_OUTPUT
+          echo "secondary_status=$SECONDARY_STATUS" >> $GITHUB_OUTPUT
+          echo "overall_status=$OVERALL_STATUS" >> $GITHUB_OUTPUT
 
       - name: Send deployment notification
         uses: olli-ai/slack-notify-action-gke@master
@@ -458,12 +483,12 @@ jobs:
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: |
             - Environments: ${{ needs.SETUP.outputs.deploy-staging == 'true' && 'Staging' || '' }}
-            ${{ needs.SETUP.outputs.deploy-staging == 'true' && format('• {0}: {1}', env.PRIMARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
-            ${{ needs.SETUP.outputs.deploy-staging == 'true' && format('• {0}: {1}', env.SECONDARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
-            
+            ${{ needs.SETUP.outputs.deploy-staging == 'true' && format('• {0}: {1}', env.PRIMARY_REGION, steps.results.outputs.primary_status) || '' }}
+            ${{ needs.SETUP.outputs.deploy-staging == 'true' && format('• {0}: {1}', env.SECONDARY_REGION, steps.results.outputs.secondary_status) || '' }}
+
             - Environments: ${{ needs.SETUP.outputs.deploy-production == 'true' && 'Production' || '' }}
-            ${{ needs.SETUP.outputs.deploy-production == 'true' && format('• {0}: {1}', env.PRIMARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
-            ${{ needs.SETUP.outputs.deploy-production == 'true' && format('• {0}: {1}', env.SECONDARY_REGION, needs.DEPLOY.result == 'success' && 'Success' || needs.DEPLOY.result == 'failure' && 'Failed' || 'Skipped') || '' }}
+            ${{ needs.SETUP.outputs.deploy-production == 'true' && format('• {0}: {1}', env.PRIMARY_REGION, steps.results.outputs.primary_status) || '' }}
+            ${{ needs.SETUP.outputs.deploy-production == 'true' && format('• {0}: {1}', env.SECONDARY_REGION, steps.results.outputs.secondary_status) || '' }}
           SLACK_TITLE: 'Multi-Region Deployment - ${{ env.APP_NAME }}'
           SLACK_USERNAME: ${{ env.SLACK_USERNAME }}
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
