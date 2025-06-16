@@ -212,6 +212,7 @@ jobs:
       matrix:
         region: ${{ fromJson(needs.SETUP.outputs.regions-matrix) }}
         environment: ${{ fromJson(needs.SETUP.outputs.environments-matrix) }}
+      fail-fast: false  # Important: Don't fail fast so we can track individual results
     outputs:
       version: ${{ needs.SETUP.outputs.version }}
     steps:
@@ -267,6 +268,27 @@ jobs:
             --tag ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:latest \
             --push \
             .
+
+      - name: Report build status to step summary
+        if: always()
+        run: |
+          JOB_ID="${{ matrix.region }}-${{ matrix.environment }}-build"
+          
+          if [[ "${{ job.status }}" == "success" ]]; then
+            STATUS="Success"
+            EXIT_CODE=0
+          else
+            STATUS="Failed"
+            EXIT_CODE=1
+          fi
+          
+          echo "### Build Status: $STATUS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ matrix.region }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Job ID**: ${JOB_ID}" >> $GITHUB_STEP_SUMMARY
+          
+          # Create a unique comment that the summary job can parse
+          echo "BUILD_RESULT:${JOB_ID}:${STATUS}" >> $GITHUB_STEP_SUMMARY
 
   # General deployment job that handles both staging and production
   DEPLOY:
@@ -421,61 +443,140 @@ jobs:
           # Common health checks for all environments
           # kubectl run health-check --image=your-health-check-image --rm -i --restart=Never -- /run-health-checks.sh
 
+      - name: Report deployment status to step summary
+        if: always()
+        run: |
+          JOB_ID="${{ matrix.region }}-${{ matrix.environment }}-deploy"
+          
+          if [[ "${{ needs.BUILD_AND_PUSH.result }}" != "success" ]]; then
+            STATUS="Skipped (Build Failed)"
+          elif [[ "${{ job.status }}" == "success" ]]; then
+            STATUS="Success"
+          else
+            STATUS="Failed"
+          fi
+          
+          echo "### Deploy Status: $STATUS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ matrix.region }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Job ID**: ${JOB_ID}" >> $GITHUB_STEP_SUMMARY
+          
+          # Create a unique comment that the summary job can parse
+          echo "DEPLOY_RESULT:${JOB_ID}:${STATUS}" >> $GITHUB_STEP_SUMMARY
+
   # Deployment summary
   DEPLOYMENT_SUMMARY:
-    needs: [SETUP, BUILD_AND_PUSH,DEPLOY]
+    needs: [ SETUP, BUILD_AND_PUSH, DEPLOY ]
     runs-on: ubuntu-latest
     if: always() && (needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true')
     steps:
-      - name: Collect deployment results
-        id: results
+      - name: Get individual job results via GitHub API
+        id: get_results
         run: |
-          BUILD_RESULT="${{ needs.BUILD_AND_PUSH.result }}"
-          DEPLOY_RESULT="${{ needs.DEPLOY.result }}"
-
-          # Determine per-region deploy statuses
-          if [[ "$BUILD_RESULT" == "failure" ]]; then
-            PRIMARY_STATUS="Skipped (Build Failed)"
-            SECONDARY_STATUS="Skipped (Build Failed)"
+          # Get workflow run details via GitHub API
+          RUN_ID="${{ github.run_id }}"
+          
+          # Get jobs in this workflow run
+          curl -H "Authorization: token ${{ github.token }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               "https://api.github.com/repos/${{ github.repository }}/actions/runs/${RUN_ID}/jobs" > jobs.json
+          
+          # Parse build jobs
+          echo "=== BUILD JOBS ==="
+          BUILD_RESULTS=""
+          jq -r '.jobs[] | select(.name | contains("BUILD_AND_PUSH")) | "\(.name):\(.conclusion)"' jobs.json | while read line; do
+            echo "Build job: $line"
+            if [[ -z "$BUILD_RESULTS" ]]; then
+              BUILD_RESULTS="$line"
+            else
+              BUILD_RESULTS="$BUILD_RESULTS,$line"
+            fi
+          done
+          
+          # Parse deploy jobs  
+          echo "=== DEPLOY JOBS ==="
+          DEPLOY_RESULTS=""
+          jq -r '.jobs[] | select(.name | contains("DEPLOY")) | "\(.name):\(.conclusion)"' jobs.json | while read line; do
+            echo "Deploy job: $line"
+            if [[ -z "$DEPLOY_RESULTS" ]]; then
+              DEPLOY_RESULTS="$line"
+            else
+              DEPLOY_RESULTS="$DEPLOY_RESULTS,$line"
+            fi
+          done
+          
+          # Set outputs (limited by what we can extract from job names)
+          echo "build_jobs_found=$(jq '.jobs[] | select(.name | contains("BUILD_AND_PUSH")) | .name' jobs.json | wc -l)" >> $GITHUB_OUTPUT
+          echo "deploy_jobs_found=$(jq '.jobs[] | select(.name | contains("DEPLOY")) | .name' jobs.json | wc -l)" >> $GITHUB_OUTPUT
+          
+          # Determine overall success
+          BUILD_SUCCESS=$(jq '.jobs[] | select(.name | contains("BUILD_AND_PUSH")) | .conclusion' jobs.json | grep -v "success" | wc -l)
+          DEPLOY_SUCCESS=$(jq '.jobs[] | select(.name | contains("DEPLOY")) | .conclusion' jobs.json | grep -v "success" | wc -l)
+          
+          if [[ $BUILD_SUCCESS -eq 0 && $DEPLOY_SUCCESS -eq 0 ]]; then
+            echo "overall_success=true" >> $GITHUB_OUTPUT
+            echo "slack_color=good" >> $GITHUB_OUTPUT
           else
-            case "$DEPLOY_RESULT" in
-              success)
-                PRIMARY_STATUS="Success"
-                SECONDARY_STATUS="Success"
-                ;;
-              failure)
-                PRIMARY_STATUS="Failed"
-                SECONDARY_STATUS="Failed"
-                ;;
-              cancelled)
-                PRIMARY_STATUS="Cancelled"
-                SECONDARY_STATUS="Cancelled"
-                ;;
-              *)
-                PRIMARY_STATUS="Skipped"
-                SECONDARY_STATUS="Skipped"
-                ;;
-            esac
+            echo "overall_success=false" >> $GITHUB_OUTPUT
+            echo "slack_color=danger" >> $GITHUB_OUTPUT
           fi
 
-          echo "primary_status=$PRIMARY_STATUS" >> $GITHUB_OUTPUT
-          echo "secondary_status=$SECONDARY_STATUS" >> $GITHUB_OUTPUT
-          echo "overall_status=$OVERALL_STATUS" >> $GITHUB_OUTPUT
+      - name: Generate detailed status report
+        id: detailed_report
+        run: |
+          # Get individual job statuses from the API response
+          BUILD_JOBS=$(jq -r '.jobs[] | select(.name | contains("BUILD_AND_PUSH")) | "\(.name): \(.conclusion // "unknown")"' jobs.json)
+          DEPLOY_JOBS=$(jq -r '.jobs[] | select(.name | contains("DEPLOY") and (.name | contains("BUILD_AND_PUSH") | not)) | "\(.name): \(.conclusion // "unknown")"' jobs.json)
+          
+          # Build detailed message
+          MESSAGE="🚀 **Multi-Region Deployment Report - ${{ env.APP_NAME }}**\n\n"
+          MESSAGE+="📊 **OVERVIEW**\n"
+          MESSAGE+="• Version: \`${{ needs.SETUP.outputs.version }}\`\n"
+          MESSAGE+="• Regions: ${{ needs.SETUP.outputs.regions }}\n\n"
+          
+          MESSAGE+="🏗️ **BUILD STATUS**\n"
+          while IFS= read -r line; do
+            if [[ -n "$line" ]]; then
+              JOB_NAME=$(echo "$line" | cut -d':' -f1 | sed 's/BUILD_AND_PUSH (//' | sed 's/)//')
+              STATUS=$(echo "$line" | cut -d':' -f2 | xargs)
+              case "$STATUS" in
+                "success") ICON="✅" ;;
+                "failure") ICON="❌" ;;
+                "cancelled") ICON="🚫" ;;
+                *) ICON="⚠️" ;;
+              esac
+              MESSAGE+="• $JOB_NAME: $ICON $STATUS\n"
+            fi
+          done <<< "$BUILD_JOBS"
+          
+          MESSAGE+="\n🚀 **DEPLOYMENT STATUS**\n"
+          while IFS= read -r line; do
+            if [[ -n "$line" ]]; then
+              JOB_NAME=$(echo "$line" | cut -d':' -f1 | sed 's/DEPLOY (//' | sed 's/)//')
+              STATUS=$(echo "$line" | cut -d':' -f2 | xargs)
+              case "$STATUS" in
+                "success") ICON="✅" ;;
+                "failure") ICON="❌" ;;
+                "cancelled") ICON="🚫" ;;
+                *) ICON="⚠️" ;;
+              esac
+              MESSAGE+="• $JOB_NAME: $ICON $STATUS\n"
+            fi
+          done <<< "$DEPLOY_JOBS"
+          
+          MESSAGE+="\n🎯 **OVERALL**: ${{ steps.get_results.outputs.overall_success == 'true' && '✅ SUCCESS' || '❌ FAILURE' }}"
+          
+          echo "message<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$MESSAGE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Send deployment notification
+      - name: Send notification
         uses: olli-ai/slack-notify-action-gke@master
         env:
           SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
-          SLACK_COLOR: ${{ steps.results.outputs.overall_status }}
+          SLACK_COLOR: ${{ steps.get_results.outputs.slack_color }}
           SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: |
-            - Environments: ${{ needs.SETUP.outputs.deploy-staging == 'true' && 'Staging' || '' }}
-            ${{ needs.SETUP.outputs.deploy-staging == 'true' && format('• {0}: {1}', env.PRIMARY_REGION, steps.results.outputs.primary_status) || '' }}
-            ${{ needs.SETUP.outputs.deploy-staging == 'true' && format('• {0}: {1}', env.SECONDARY_REGION, steps.results.outputs.secondary_status) || '' }}
-
-            - Environments: ${{ needs.SETUP.outputs.deploy-production == 'true' && 'Production' || '' }}
-            ${{ needs.SETUP.outputs.deploy-production == 'true' && format('• {0}: {1}', env.PRIMARY_REGION, steps.results.outputs.primary_status) || '' }}
-            ${{ needs.SETUP.outputs.deploy-production == 'true' && format('• {0}: {1}', env.SECONDARY_REGION, steps.results.outputs.secondary_status) || '' }}
-          SLACK_TITLE: 'Multi-Region Deployment - ${{ env.APP_NAME }}'
+          SLACK_MESSAGE: ${{ steps.detailed_report.outputs.message }}
+          SLACK_TITLE: '🚀 Multi-Region Deployment - ${{ env.APP_NAME }} v${{ needs.SETUP.outputs.version }}'
           SLACK_USERNAME: ${{ env.SLACK_USERNAME }}
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
