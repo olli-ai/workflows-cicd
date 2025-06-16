@@ -465,7 +465,7 @@ jobs:
           echo "DEPLOY_RESULT:${JOB_ID}:${STATUS}" >> $GITHUB_STEP_SUMMARY
 
   # Deployment summary
-  DEPLOYMENT_SUMMARY:
+  SUMMARY:
     needs: [ SETUP, BUILD_AND_PUSH, DEPLOY ]
     runs-on: ubuntu-latest
     if: always() && (needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true')
@@ -526,7 +526,6 @@ jobs:
             # Set safe defaults
             echo "build_jobs_found=0" >> $GITHUB_OUTPUT
             echo "deploy_jobs_found=0" >> $GITHUB_OUTPUT
-            echo "overall_success=false" >> $GITHUB_OUTPUT
             echo "slack_color=warning" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -567,10 +566,8 @@ jobs:
           echo "Deploy failures: $DEPLOY_FAILURES"
           
           if [[ "$BUILD_FAILURES" -eq 0 && "$DEPLOY_FAILURES" -eq 0 ]]; then
-            echo "overall_success=true" >> $GITHUB_OUTPUT
             echo "slack_color=good" >> $GITHUB_OUTPUT
           else
-            echo "overall_success=false" >> $GITHUB_OUTPUT
             echo "slack_color=danger" >> $GITHUB_OUTPUT
           fi
 
@@ -585,56 +582,47 @@ jobs:
           # Get individual job statuses from the API response with safe handling
           BUILD_JOBS=$(jq -r '.jobs[]? | select(.name? // "" | test("BUILD_AND_PUSH")) | "\(.name): \(.conclusion // "pending")"' jobs.json 2>/dev/null || echo "")
           DEPLOY_JOBS=$(jq -r '.jobs[]? | select(.name? // "" | test("DEPLOY") and (.name? // "" | test("BUILD_AND_PUSH") | not)) | "\(.name): \(.conclusion // "pending")"' jobs.json 2>/dev/null || echo "")
-          
-          # Build detailed message
-          MESSAGE="🚀 **Multi-Region Deployment Report - ${{ env.APP_NAME }}**\n\n"
-          MESSAGE+="📊 **OVERVIEW**\n"
-          MESSAGE+="• Version: \`${{ needs.SETUP.outputs.version }}\`\n"
-          MESSAGE+="• Regions: ${{ needs.SETUP.outputs.regions }}\n"
-          MESSAGE+="• Workflow: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n"
-          
-          MESSAGE+="🏗️ **BUILD STATUS**\n"
+                    
+          MESSAGE+="- BUILD STATUS\n"
           if [[ -n "$BUILD_JOBS" ]]; then
             while IFS= read -r line; do
               if [[ -n "$line" ]]; then
                 JOB_NAME=$(echo "$line" | cut -d':' -f1 | sed 's/BUILD_AND_PUSH (//' | sed 's/)//')
                 STATUS=$(echo "$line" | cut -d':' -f2 | xargs)
                 case "$STATUS" in
-                  "success") ICON="✅" ;;
-                  "failure") ICON="❌" ;;
-                  "cancelled") ICON="🚫" ;;
-                  "pending"|"in_progress") ICON="🔄" ;;
-                  *) ICON="⚠️" ;;
+                  "success");;
+                  "failure");;
+                  "cancelled");;
+                  "pending"|"in_progress");;
+                  *);;
                 esac
-                MESSAGE+="• $JOB_NAME: $ICON $STATUS\n"
+                MESSAGE+="• $JOB_NAME: $STATUS\n"
               fi
             done <<< "$BUILD_JOBS"
           else
             MESSAGE+="• No build jobs found\n"
           fi
           
-          MESSAGE+="\n🚀 **DEPLOYMENT STATUS**\n"
+          MESSAGE+="\n- DEPLOYMENT STATUS\n"
           if [[ -n "$DEPLOY_JOBS" ]]; then
             while IFS= read -r line; do
               if [[ -n "$line" ]]; then
                 JOB_NAME=$(echo "$line" | cut -d':' -f1 | sed 's/DEPLOY (//' | sed 's/)//')
                 STATUS=$(echo "$line" | cut -d':' -f2 | xargs)
                 case "$STATUS" in
-                  "success") ICON="✅" ;;
-                  "failure") ICON="❌" ;;
-                  "cancelled") ICON="🚫" ;;
-                  "pending"|"in_progress") ICON="🔄" ;;
-                  *) ICON="⚠️" ;;
+                  "success");;
+                  "failure");;
+                  "cancelled");;
+                  "pending"|"in_progress");;
+                  *);;
                 esac
-                MESSAGE+="• $JOB_NAME: $ICON $STATUS\n"
+                MESSAGE+="• $JOB_NAME: $STATUS\n"
               fi
             done <<< "$DEPLOY_JOBS"
           else
             MESSAGE+="• No deploy jobs found\n"
           fi
-          
-          MESSAGE+="\n🎯 **OVERALL**: ${{ steps.get_results.outputs.overall_success == 'true' && '✅ SUCCESS' || '❌ FAILURE' }}"
-          
+                    
           # Use proper multiline output for GitHub Actions
           {
             echo 'message<<EOF'
@@ -649,6 +637,6 @@ jobs:
           SLACK_COLOR: ${{ steps.get_results.outputs.slack_color }}
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ${{ steps.detailed_report.outputs.message }}
-          SLACK_TITLE: '🚀 Multi-Region Deployment - ${{ env.APP_NAME }} v${{ needs.SETUP.outputs.version }}'
+          SLACK_TITLE: 'Multi-Region Deployment - ${{ env.APP_NAME }}'
           SLACK_USERNAME: ${{ env.SLACK_USERNAME }}
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
