@@ -472,6 +472,8 @@ jobs:
     steps:
       - name: Get individual job results via GitHub API
         id: get_results
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Get workflow run details via GitHub API
           RUN_ID="${{ github.run_id }}"
@@ -479,39 +481,91 @@ jobs:
           API_URL="https://api.github.com/repos/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100"
 
           echo "Fetching job data from GitHub API..."
-          curl -sSL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-               -H "Accept: application/vnd.github.v3+json" \
-               "$API_URL" > jobs.json
-
-          # Check if 'jobs' key exists
-          if ! jq -e '.jobs' jobs.json > /dev/null; then
-            echo "ERROR: Invalid GitHub API response. 'jobs' key not found."
+          echo "API URL: $API_URL"
+          
+          # Make API call with proper error handling
+          HTTP_STATUS=$(curl -sSL -w "%{http_code}" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$API_URL" -o jobs.json)
+          
+          echo "HTTP Status: $HTTP_STATUS"
+          
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "ERROR: GitHub API returned status $HTTP_STATUS"
+            echo "Response content:"
             cat jobs.json
             exit 1
           fi
-
+          
+          # Validate JSON structure
+          if ! jq empty jobs.json 2>/dev/null; then
+            echo "ERROR: Invalid JSON response"
+            echo "Response content:"
+            cat jobs.json
+            exit 1
+          fi
+          
+          # Check if 'jobs' key exists
+          if ! jq -e '.jobs' jobs.json > /dev/null; then
+            echo "ERROR: Invalid GitHub API response. 'jobs' key not found."
+            echo "Available keys:"
+            jq 'keys' jobs.json 2>/dev/null || echo "Cannot determine keys"
+            echo "Full response:"
+            cat jobs.json
+            exit 1
+          fi
+          
+          # Verify we have jobs
+          JOBS_COUNT=$(jq '.jobs | length' jobs.json)
+          echo "Found $JOBS_COUNT jobs"
+          
+          if [ "$JOBS_COUNT" -eq 0 ]; then
+            echo "WARNING: No jobs found. This might be normal for a fresh workflow run."
+            # Set safe defaults
+            echo "build_jobs_found=0" >> $GITHUB_OUTPUT
+            echo "deploy_jobs_found=0" >> $GITHUB_OUTPUT
+            echo "overall_success=false" >> $GITHUB_OUTPUT
+            echo "slack_color=warning" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "=== JOB LISTING ==="
+          jq -r '.jobs[] | "- \(.name) (\(.conclusion // "running"))"' jobs.json
+          
           echo "=== BUILD JOBS ==="
           BUILD_RESULTS=""
           while IFS= read -r line; do
-            echo "Build job: $line"
-            [[ -z "$BUILD_RESULTS" ]] && BUILD_RESULTS="$line" || BUILD_RESULTS="$BUILD_RESULTS,$line"
+            if [[ -n "$line" && "$line" != "null" ]]; then
+              echo "Build job: $line"
+              [[ -z "$BUILD_RESULTS" ]] && BUILD_RESULTS="$line" || BUILD_RESULTS="$BUILD_RESULTS,$line"
+            fi
           done < <(jq -r '.jobs[] | select(.name | test("BUILD_AND_PUSH")) | "\(.name):\(.conclusion // "unknown")"' jobs.json)
-
+          
           echo "=== DEPLOY JOBS ==="
           DEPLOY_RESULTS=""
           while IFS= read -r line; do
-            echo "Deploy job: $line"
-            [[ -z "$DEPLOY_RESULTS" ]] && DEPLOY_RESULTS="$line" || DEPLOY_RESULTS="$DEPLOY_RESULTS,$line"
+            if [[ -n "$line" && "$line" != "null" ]]; then
+              echo "Deploy job: $line"
+              [[ -z "$DEPLOY_RESULTS" ]] && DEPLOY_RESULTS="$line" || DEPLOY_RESULTS="$DEPLOY_RESULTS,$line"
+            fi
           done < <(jq -r '.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not)) | "\(.name):\(.conclusion // "unknown")"' jobs.json)
           
-          # Set outputs (limited by what we can extract from job names)
-          echo "build_jobs_found=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH"))] | length' jobs.json)" >> $GITHUB_OUTPUT
-          echo "deploy_jobs_found=$(jq '[.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not))] | length' jobs.json)" >> $GITHUB_OUTPUT
+          # Count jobs
+          BUILD_JOBS_COUNT=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH"))] | length' jobs.json)
+          DEPLOY_JOBS_COUNT=$(jq '[.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not))] | length' jobs.json)
+          
+          echo "build_jobs_found=$BUILD_JOBS_COUNT" >> $GITHUB_OUTPUT
+          echo "deploy_jobs_found=$DEPLOY_JOBS_COUNT" >> $GITHUB_OUTPUT
           
           # Determine overall success
           BUILD_FAILURES=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH")) | select(.conclusion != "success")] | length' jobs.json)
           DEPLOY_FAILURES=$(jq '[.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not)) | select(.conclusion != "success")] | length' jobs.json)
-
+          
+          echo "Build failures: $BUILD_FAILURES"
+          echo "Deploy failures: $DEPLOY_FAILURES"
+          
           if [[ "$BUILD_FAILURES" -eq 0 && "$DEPLOY_FAILURES" -eq 0 ]]; then
             echo "overall_success=true" >> $GITHUB_OUTPUT
             echo "slack_color=good" >> $GITHUB_OUTPUT
@@ -523,51 +577,70 @@ jobs:
       - name: Generate detailed status report
         id: detailed_report
         run: |
-          # Get individual job statuses from the API response
-          BUILD_JOBS=$(jq -r '.jobs[] | select(.name | contains("BUILD_AND_PUSH")) | "\(.name): \(.conclusion // "unknown")"' jobs.json)
-          DEPLOY_JOBS=$(jq -r '.jobs[] | select(.name | contains("DEPLOY") and (.name | contains("BUILD_AND_PUSH") | not)) | "\(.name): \(.conclusion // "unknown")"' jobs.json)
+          if [ ! -f "jobs.json" ]; then
+            echo "ERROR: jobs.json not found"
+            exit 1
+          fi
+          
+          # Get individual job statuses from the API response with safe handling
+          BUILD_JOBS=$(jq -r '.jobs[]? | select(.name? // "" | test("BUILD_AND_PUSH")) | "\(.name): \(.conclusion // "pending")"' jobs.json 2>/dev/null || echo "")
+          DEPLOY_JOBS=$(jq -r '.jobs[]? | select(.name? // "" | test("DEPLOY") and (.name? // "" | test("BUILD_AND_PUSH") | not)) | "\(.name): \(.conclusion // "pending")"' jobs.json 2>/dev/null || echo "")
           
           # Build detailed message
           MESSAGE="🚀 **Multi-Region Deployment Report - ${{ env.APP_NAME }}**\n\n"
           MESSAGE+="📊 **OVERVIEW**\n"
           MESSAGE+="• Version: \`${{ needs.SETUP.outputs.version }}\`\n"
-          MESSAGE+="• Regions: ${{ needs.SETUP.outputs.regions }}\n\n"
+          MESSAGE+="• Regions: ${{ needs.SETUP.outputs.regions }}\n"
+          MESSAGE+="• Workflow: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n"
           
           MESSAGE+="🏗️ **BUILD STATUS**\n"
-          while IFS= read -r line; do
-            if [[ -n "$line" ]]; then
-              JOB_NAME=$(echo "$line" | cut -d':' -f1 | sed 's/BUILD_AND_PUSH (//' | sed 's/)//')
-              STATUS=$(echo "$line" | cut -d':' -f2 | xargs)
-              case "$STATUS" in
-                "success") ICON="✅" ;;
-                "failure") ICON="❌" ;;
-                "cancelled") ICON="🚫" ;;
-                *) ICON="⚠️" ;;
-              esac
-              MESSAGE+="• $JOB_NAME: $ICON $STATUS\n"
-            fi
-          done <<< "$BUILD_JOBS"
+          if [[ -n "$BUILD_JOBS" ]]; then
+            while IFS= read -r line; do
+              if [[ -n "$line" ]]; then
+                JOB_NAME=$(echo "$line" | cut -d':' -f1 | sed 's/BUILD_AND_PUSH (//' | sed 's/)//')
+                STATUS=$(echo "$line" | cut -d':' -f2 | xargs)
+                case "$STATUS" in
+                  "success") ICON="✅" ;;
+                  "failure") ICON="❌" ;;
+                  "cancelled") ICON="🚫" ;;
+                  "pending"|"in_progress") ICON="🔄" ;;
+                  *) ICON="⚠️" ;;
+                esac
+                MESSAGE+="• $JOB_NAME: $ICON $STATUS\n"
+              fi
+            done <<< "$BUILD_JOBS"
+          else
+            MESSAGE+="• No build jobs found\n"
+          fi
           
           MESSAGE+="\n🚀 **DEPLOYMENT STATUS**\n"
-          while IFS= read -r line; do
-            if [[ -n "$line" ]]; then
-              JOB_NAME=$(echo "$line" | cut -d':' -f1 | sed 's/DEPLOY (//' | sed 's/)//')
-              STATUS=$(echo "$line" | cut -d':' -f2 | xargs)
-              case "$STATUS" in
-                "success") ICON="✅" ;;
-                "failure") ICON="❌" ;;
-                "cancelled") ICON="🚫" ;;
-                *) ICON="⚠️" ;;
-              esac
-              MESSAGE+="• $JOB_NAME: $ICON $STATUS\n"
-            fi
-          done <<< "$DEPLOY_JOBS"
+          if [[ -n "$DEPLOY_JOBS" ]]; then
+            while IFS= read -r line; do
+              if [[ -n "$line" ]]; then
+                JOB_NAME=$(echo "$line" | cut -d':' -f1 | sed 's/DEPLOY (//' | sed 's/)//')
+                STATUS=$(echo "$line" | cut -d':' -f2 | xargs)
+                case "$STATUS" in
+                  "success") ICON="✅" ;;
+                  "failure") ICON="❌" ;;
+                  "cancelled") ICON="🚫" ;;
+                  "pending"|"in_progress") ICON="🔄" ;;
+                  *) ICON="⚠️" ;;
+                esac
+                MESSAGE+="• $JOB_NAME: $ICON $STATUS\n"
+              fi
+            done <<< "$DEPLOY_JOBS"
+          else
+            MESSAGE+="• No deploy jobs found\n"
+          fi
           
           MESSAGE+="\n🎯 **OVERALL**: ${{ steps.get_results.outputs.overall_success == 'true' && '✅ SUCCESS' || '❌ FAILURE' }}"
           
-          echo "message<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$MESSAGE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Use proper multiline output for GitHub Actions
+          {
+            echo 'message<<EOF'
+            echo -e "$MESSAGE"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
 
       - name: Send notification
         uses: olli-ai/slack-notify-action-gke@master
