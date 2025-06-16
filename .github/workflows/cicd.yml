@@ -475,45 +475,44 @@ jobs:
         run: |
           # Get workflow run details via GitHub API
           RUN_ID="${{ github.run_id }}"
-          
-          # Get jobs in this workflow run
-          curl -H "Authorization: token ${{ github.token }}" \
+          REPO="${{ github.repository }}"
+          API_URL="https://api.github.com/repos/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100"
+
+          echo "Fetching job data from GitHub API..."
+          curl -sSL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                -H "Accept: application/vnd.github.v3+json" \
-               "https://api.github.com/repos/${{ github.repository }}/actions/runs/${RUN_ID}/jobs" > jobs.json
-          
-          # Parse build jobs
+               "$API_URL" > jobs.json
+
+          # Check if 'jobs' key exists
+          if ! jq -e '.jobs' jobs.json > /dev/null; then
+            echo "ERROR: Invalid GitHub API response. 'jobs' key not found."
+            cat jobs.json
+            exit 1
+          fi
+
           echo "=== BUILD JOBS ==="
           BUILD_RESULTS=""
-          jq -r '.jobs[] | select(.name | contains("BUILD_AND_PUSH")) | "\(.name):\(.conclusion)"' jobs.json | while read line; do
+          while IFS= read -r line; do
             echo "Build job: $line"
-            if [[ -z "$BUILD_RESULTS" ]]; then
-              BUILD_RESULTS="$line"
-            else
-              BUILD_RESULTS="$BUILD_RESULTS,$line"
-            fi
-          done
-          
-          # Parse deploy jobs  
+            [[ -z "$BUILD_RESULTS" ]] && BUILD_RESULTS="$line" || BUILD_RESULTS="$BUILD_RESULTS,$line"
+          done < <(jq -r '.jobs[] | select(.name | test("BUILD_AND_PUSH")) | "\(.name):\(.conclusion // "unknown")"' jobs.json)
+
           echo "=== DEPLOY JOBS ==="
           DEPLOY_RESULTS=""
-          jq -r '.jobs[] | select(.name | contains("DEPLOY")) | "\(.name):\(.conclusion)"' jobs.json | while read line; do
+          while IFS= read -r line; do
             echo "Deploy job: $line"
-            if [[ -z "$DEPLOY_RESULTS" ]]; then
-              DEPLOY_RESULTS="$line"
-            else
-              DEPLOY_RESULTS="$DEPLOY_RESULTS,$line"
-            fi
-          done
+            [[ -z "$DEPLOY_RESULTS" ]] && DEPLOY_RESULTS="$line" || DEPLOY_RESULTS="$DEPLOY_RESULTS,$line"
+          done < <(jq -r '.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not)) | "\(.name):\(.conclusion // "unknown")"' jobs.json)
           
           # Set outputs (limited by what we can extract from job names)
-          echo "build_jobs_found=$(jq '.jobs[] | select(.name | contains("BUILD_AND_PUSH")) | .name' jobs.json | wc -l)" >> $GITHUB_OUTPUT
-          echo "deploy_jobs_found=$(jq '.jobs[] | select(.name | contains("DEPLOY")) | .name' jobs.json | wc -l)" >> $GITHUB_OUTPUT
+          echo "build_jobs_found=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH"))] | length' jobs.json)" >> $GITHUB_OUTPUT
+          echo "deploy_jobs_found=$(jq '[.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not))] | length' jobs.json)" >> $GITHUB_OUTPUT
           
           # Determine overall success
-          BUILD_SUCCESS=$(jq '.jobs[] | select(.name | contains("BUILD_AND_PUSH")) | .conclusion' jobs.json | grep -v "success" | wc -l)
-          DEPLOY_SUCCESS=$(jq '.jobs[] | select(.name | contains("DEPLOY")) | .conclusion' jobs.json | grep -v "success" | wc -l)
-          
-          if [[ $BUILD_SUCCESS -eq 0 && $DEPLOY_SUCCESS -eq 0 ]]; then
+          BUILD_FAILURES=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH")) | select(.conclusion != "success")] | length' jobs.json)
+          DEPLOY_FAILURES=$(jq '[.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not)) | select(.conclusion != "success")] | length' jobs.json)
+
+          if [[ "$BUILD_FAILURES" -eq 0 && "$DEPLOY_FAILURES" -eq 0 ]]; then
             echo "overall_success=true" >> $GITHUB_OUTPUT
             echo "slack_color=good" >> $GITHUB_OUTPUT
           else
