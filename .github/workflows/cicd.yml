@@ -579,57 +579,55 @@ jobs:
             exit 1
           fi
           
-          # Get individual job statuses from the API response with safe handling
-          BUILD_JOBS=$(jq -r '.jobs[]? | select(.name? // "" | test("BUILD_AND_PUSH")) | "\(.name): \(.conclusion // "pending")"' jobs.json 2>/dev/null || echo "")
-          DEPLOY_JOBS=$(jq -r '.jobs[]? | select(.name? // "" | test("DEPLOY") and (.name? // "" | test("BUILD_AND_PUSH") | not)) | "\(.name): \(.conclusion // "pending")"' jobs.json 2>/dev/null || echo "")
-                    
-          MESSAGE+="- BUILD STATUS\n"
-          if [[ -n "$BUILD_JOBS" ]]; then
-            while IFS= read -r line; do
-              if [[ -n "$line" ]]; then
-                JOB_NAME=$(echo "$line" | cut -d':' -f1 | sed 's/BUILD_AND_PUSH (//' | sed 's/)//')
-                STATUS=$(echo "$line" | cut -d':' -f2 | xargs)
-                case "$STATUS" in
-                  "success");;
-                  "failure");;
-                  "cancelled");;
-                  "pending"|"in_progress");;
-                  *);;
-                esac
-                MESSAGE+="• $JOB_NAME: $STATUS\n"
-              fi
-            done <<< "$BUILD_JOBS"
-          else
-            MESSAGE+="• No build jobs found\n"
-          fi
+          # Parse regions from the setup output
+          REGIONS="${{ needs.SETUP.outputs.regions }}"
+          IFS=',' read -ra REGION_ARRAY <<< "$REGIONS"
           
-          MESSAGE+="\n- DEPLOYMENT STATUS\n"
-          if [[ -n "$DEPLOY_JOBS" ]]; then
-            while IFS= read -r line; do
-              if [[ -n "$line" ]]; then
-                JOB_NAME=$(echo "$line" | cut -d':' -f1 | sed 's/DEPLOY (//' | sed 's/)//')
-                STATUS=$(echo "$line" | cut -d':' -f2 | xargs)
-                case "$STATUS" in
-                  "success");;
-                  "failure");;
-                  "cancelled");;
-                  "pending"|"in_progress");;
-                  *);;
-                esac
-                MESSAGE+="• $JOB_NAME: $STATUS\n"
-              fi
-            done <<< "$DEPLOY_JOBS"
-          else
-            MESSAGE+="• No deploy jobs found\n"
-          fi
-                    
+          MESSAGE="Status:\n"
+          
+          # Group results by region
+          for region in "${REGION_ARRAY[@]}"; do
+            MESSAGE+="$region:\n"
+          
+            # Get build status for this region
+            BUILD_STATUS=$(jq -r --arg region "$region" '.jobs[]? | select(.name? // "" | test("BUILD_AND_PUSH.*" + $region)) | .conclusion // "pending"' jobs.json 2>/dev/null || echo "unknown")
+          
+            # Get deploy status for this region  
+            DEPLOY_STATUS=$(jq -r --arg region "$region" '.jobs[]? | select(.name? // "" | test("DEPLOY.*" + $region) and (.name? // "" | test("BUILD_AND_PUSH") | not)) | .conclusion // "pending"' jobs.json 2>/dev/null || echo "unknown")
+          
+            # Format status with emojis for better readability
+            case "$BUILD_STATUS" in
+              "success") BUILD_EMOJI="✅" ;;
+              "failure") BUILD_EMOJI="❌" ;;
+              "cancelled") BUILD_EMOJI="⚠️" ;;
+              "pending"|"in_progress") BUILD_EMOJI="🔄" ;;
+              *) BUILD_EMOJI="❓" ;;
+            esac
+          
+            case "$DEPLOY_STATUS" in
+              "success") DEPLOY_EMOJI="✅" ;;
+              "failure") DEPLOY_EMOJI="❌" ;;
+              "cancelled") DEPLOY_EMOJI="⚠️" ;;
+              "pending"|"in_progress") DEPLOY_EMOJI="🔄" ;;
+              *) DEPLOY_EMOJI="❓" ;;
+            esac
+          
+            MESSAGE+="  BUILD: $BUILD_EMOJI $BUILD_STATUS\n"
+            MESSAGE+="  DEPLOY: $DEPLOY_EMOJI $DEPLOY_STATUS\n"
+          done
+          
+          # Add summary line
+          TOTAL_JOBS=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH|DEPLOY"))] | length' jobs.json 2>/dev/null || echo "0")
+          SUCCESS_JOBS=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH|DEPLOY")) | select(.conclusion == "success")] | length' jobs.json 2>/dev/null || echo "0")
+          
+          MESSAGE+="\nSummary: $SUCCESS_JOBS/$TOTAL_JOBS jobs successful"
+          
           # Use proper multiline output for GitHub Actions
           {
             echo 'message<<EOF'
             echo -e "$MESSAGE"
             echo 'EOF'
           } >> $GITHUB_OUTPUT
-
       - name: Send notification
         uses: olli-ai/slack-notify-action-gke@master
         env:
