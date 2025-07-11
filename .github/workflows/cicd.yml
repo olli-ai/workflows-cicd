@@ -76,11 +76,13 @@ env:
   SECONDARY_REGION: ${{ inputs.secondaryRegion }}
 
   # Environment names (previously hardcoded)
+  ENVIRONMENT_DEV: dev
   ENVIRONMENT_STAGING: staging
   ENVIRONMENT_PRODUCTION: production
   ENVIRONMENT_AUTO: auto
 
   # Branch mapping (previously hardcoded)
+  DEV_BRANCH: dev
   STAGING_BRANCH: master
   PRODUCTION_BRANCH: production
 
@@ -124,8 +126,8 @@ jobs:
   SETUP:
     runs-on: ubuntu-latest
     outputs:
-      deploy-staging: ${{ steps.strategy.outputs.deploy-staging }}
-      deploy-production: ${{ steps.strategy.outputs.deploy-production }}
+      # deploy-staging: ${{ steps.strategy.outputs.deploy-staging }}
+      # deploy-production: ${{ steps.strategy.outputs.deploy-production }}
       version: ${{ steps.version.outputs.version }}
       regions: ${{ steps.regions.outputs.regions }}
       regions-matrix: ${{ steps.regions.outputs.regions-matrix }}
@@ -150,19 +152,26 @@ jobs:
         id: strategy
         run: |
           ENVIRONMENTS=()
-          
+
+          if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_DEV }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.DEV_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
+            # echo "deploy-staging=true" >> $GITHUB_OUTPUT
+            ENVIRONMENTS+=("${{ env.ENVIRONMENT_DEV }}")
+          else
+            # echo "deploy-staging=false" >> $GITHUB_OUTPUT
+          fi
+
           if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.STAGING_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
-            echo "deploy-staging=true" >> $GITHUB_OUTPUT
+            # echo "deploy-staging=true" >> $GITHUB_OUTPUT
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_STAGING }}")
           else
-            echo "deploy-staging=false" >> $GITHUB_OUTPUT
+            # echo "deploy-staging=false" >> $GITHUB_OUTPUT
           fi
           
           if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.PRODUCTION_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
-            echo "deploy-production=true" >> $GITHUB_OUTPUT
+            # echo "deploy-production=true" >> $GITHUB_OUTPUT
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_PRODUCTION }}")
           else
-            echo "deploy-production=false" >> $GITHUB_OUTPUT
+            # echo "deploy-production=false" >> $GITHUB_OUTPUT
           fi
           
           # Create JSON array for matrix strategy
@@ -206,7 +215,7 @@ jobs:
   # Build and push images
   BUILD_AND_PUSH:
     needs: [SETUP]
-    if: needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true'
+    # if: needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -241,7 +250,9 @@ jobs:
           echo "REGISTRY=${REGISTRY}" >> $GITHUB_ENV
           
           # Set target environment based on deployment type
-          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]]; then
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_DEV }}" ]]; then
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_DEV }}" >> $GITHUB_ENV
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]]; then
             echo "TARGET_ENV=${{ env.ENVIRONMENT_STAGING }}" >> $GITHUB_ENV
           elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
             echo "TARGET_ENV=${{ env.ENVIRONMENT_PRODUCTION }}" >> $GITHUB_ENV
@@ -293,7 +304,7 @@ jobs:
   # General deployment job that handles both staging and production
   DEPLOY:
     needs: [SETUP, BUILD_AND_PUSH]
-    if: needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true'
+    # if: needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -468,7 +479,7 @@ jobs:
   SUMMARY:
     needs: [ SETUP, BUILD_AND_PUSH, DEPLOY ]
     runs-on: ubuntu-latest
-    if: always() && (needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true')
+    if: always()
     steps:
       - name: Get individual job results via GitHub API
         id: get_results
