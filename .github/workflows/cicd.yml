@@ -154,24 +154,15 @@ jobs:
           ENVIRONMENTS=()
 
           if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_DEV }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.DEV_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
-            # echo "deploy-staging=true" >> $GITHUB_OUTPUT
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_DEV }}")
-          else
-            # echo "deploy-staging=false" >> $GITHUB_OUTPUT
           fi
 
           if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.STAGING_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
-            # echo "deploy-staging=true" >> $GITHUB_OUTPUT
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_STAGING }}")
-          else
-            # echo "deploy-staging=false" >> $GITHUB_OUTPUT
           fi
           
           if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.PRODUCTION_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
-            # echo "deploy-production=true" >> $GITHUB_OUTPUT
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_PRODUCTION }}")
-          else
-            # echo "deploy-production=false" >> $GITHUB_OUTPUT
           fi
           
           # Create JSON array for matrix strategy
