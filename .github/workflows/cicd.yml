@@ -35,6 +35,10 @@ on:
         required: false
         type: number
         default: 3
+      helmTimeoutDev:
+        required: false
+        type: string
+        default: '10m0s'
       helmTimeoutStaging:
         required: false
         type: string
@@ -104,6 +108,7 @@ env:
   HELM_CHART_NAME: ${{ inputs.helmChartName }}
   HELM_CHART_PATH: helm-chart
   HELM_VERSION: ${{ inputs.helmVersion }}
+  HELM_TIMEOUT_DEV: ${{ inputs.helmTimeoutDev }}
   HELM_TIMEOUT_STAGING: ${{ inputs.helmTimeoutStaging }}
   HELM_TIMEOUT_PRODUCTION: ${{ inputs.helmTimeoutProduction }}
   MAX_RETRIES: ${{ inputs.maxRetries }}
@@ -330,7 +335,11 @@ jobs:
           echo "HELM_CHART_URL=${HELM_CHART_URL}" >> $GITHUB_ENV
           
           # Set namespace and target environment based on deployment type
-          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]]; then
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_DEV }}" ]]; then
+            echo "NAMESPACE=${{ env.NAMESPACE_DEV }}" >> $GITHUB_ENV
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_DEV }}" >> $GITHUB_ENV
+            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_DEV }}" >> $GITHUB_ENV
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]]; then
             echo "NAMESPACE=${{ env.NAMESPACE_STG }}" >> $GITHUB_ENV
             echo "TARGET_ENV=${{ env.ENVIRONMENT_STAGING }}" >> $GITHUB_ENV
             echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_STAGING }}" >> $GITHUB_ENV
