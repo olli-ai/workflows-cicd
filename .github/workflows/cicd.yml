@@ -38,7 +38,7 @@ on:
       helmTimeoutDev:
         required: false
         type: string
-        default: '10m0s'
+        default: '5m0s'
       helmTimeoutStaging:
         required: false
         type: string
