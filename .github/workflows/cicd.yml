@@ -184,10 +184,12 @@ jobs:
         id: regions
         run: |
           regions="${{ inputs.regions }}"
-          environment="${{ needs.strategy.outputs.environment }}"
+          environment="${{ steps.strategy.outputs.environment }}"
+
           if [[ "$environment" == "${{ env.ENVIRONMENT_DEV }}" ]]; then
             regions="ap-southeast-1"
-          else
+          fi
+
 
           echo "regions=${regions}" >> $GITHUB_OUTPUT
           
