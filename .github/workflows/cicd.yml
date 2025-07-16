@@ -184,6 +184,11 @@ jobs:
         id: regions
         run: |
           regions="${{ inputs.regions }}"
+          environment="${{ needs.strategy.outputs.environment }}"
+          if [[ "$environment" == "${{ env.ENVIRONMENT_DEV }}" ]]; then
+            regions="ap-southeast-1"
+          else
+
           echo "regions=${regions}" >> $GITHUB_OUTPUT
           
           # Convert comma-separated regions to JSON array for matrix
