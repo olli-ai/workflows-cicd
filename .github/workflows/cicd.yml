@@ -7,6 +7,50 @@ on:
       appName:
         required: true
         type: string
+      environment:
+        required: false
+        type: string
+        default: 'auto'  # auto, staging, production
+      regions:
+        required: false
+        type: string
+        default: 'us-east-1,ap-southeast-1'  # Comma-separated list
+      primaryRegion:
+        required: false
+        type: string
+        default: 'us-east-1'
+      secondaryRegion:
+        required: false
+        type: string
+        default: 'ap-southeast-1'
+      helmChartName:
+        required: false
+        type: string
+        default: 'all-service'
+      helmVersion:
+        required: false
+        type: string
+        default: '3.14.0'
+      maxRetries:
+        required: false
+        type: number
+        default: 3
+      helmTimeoutDev:
+        required: false
+        type: string
+        default: '5m0s'
+      helmTimeoutStaging:
+        required: false
+        type: string
+        default: '10m0s'
+      helmTimeoutProduction:
+        required: false
+        type: string
+        default: '15m0s'
+      keepImageCount:
+        required: false
+        type: number
+        default: 10
     secrets:
       SLACK_WEBHOOK:
         required: true
@@ -16,366 +60,612 @@ on:
         required: true
       AWS_SECRET_ACCESS_KEY:
         required: true
-  
+
 env:
-  EKS_CLUSTER: eks-primary-prod-01
-  # CI
-  REGISTRY: 905418372464.dkr.ecr.ap-southeast-1.amazonaws.com
+  # AWS Account and Registry configurations
+  AWS_ACCOUNT_ID: "905418372464"
+
+  # Cluster configurations
+  EKS_CLUSTER_PRIMARY: buddyos
+  EKS_CLUSTER_SECONDARY: eks-primary-prod-01
+
+  # Registry configurations
+  ECR_DOMAIN: dkr.ecr
+  ECR_SUFFIX: amazonaws.com
+
+  # Build configurations
   IMAGE_NAME: ${{ inputs.imageName }}
-  ENV_DEV: dev
-  ENV_STG: stg 
-  ENV_PRE-PROD: uat
-  ENV_PROD: prod
-  # CD
-  RELEASE_NAME: "chart-k8s"
   APP_NAME: ${{ inputs.appName }}
+  PRIMARY_REGION: ${{ inputs.primaryRegion }}
+  SECONDARY_REGION: ${{ inputs.secondaryRegion }}
+
+  # Environment names (previously hardcoded)
+  ENVIRONMENT_DEV: dev
+  ENVIRONMENT_STAGING: staging
+  ENVIRONMENT_PRODUCTION: production
+  ENVIRONMENT_AUTO: auto
+
+  # Branch mapping (previously hardcoded)
+  DEV_BRANCH: dev
+  STAGING_BRANCH: master
+  PRODUCTION_BRANCH: production
+
+  # Platform configuration (previously hardcoded)
+  BUILD_PLATFORM: linux/amd64
+
+  # Notification configuration (previously hardcoded)
+  SLACK_CHANNEL: alert-services
+  SLACK_USERNAME: devops
+
+  # Kubernetes configurations
+  RELEASE_NAME: "chart-k8s"
   NAMESPACE_DEV: "service-dev"
   NAMESPACE_STG: "service-staging"
-  NAMESPACE_PRE-PROD: "service-uat"
+  NAMESPACE_PRE_PROD: "service-uat"
   NAMESPACE_PROD: "service-production"
 
+  # Helm chart configurations
+  HELM_CHART_NAME: ${{ inputs.helmChartName }}
+  HELM_CHART_PATH: helm-chart
+  HELM_VERSION: ${{ inputs.helmVersion }}
+  HELM_TIMEOUT_DEV: ${{ inputs.helmTimeoutDev }}
+  HELM_TIMEOUT_STAGING: ${{ inputs.helmTimeoutStaging }}
+  HELM_TIMEOUT_PRODUCTION: ${{ inputs.helmTimeoutProduction }}
+  MAX_RETRIES: ${{ inputs.maxRetries }}
+  KEEP_IMAGE_COUNT: ${{ inputs.keepImageCount }}
+
+  # Deployment strategy configurations
+  PROD_DEPLOYMENT_STRATEGY: RollingUpdate
+  PROD_MAX_UNAVAILABLE: "25%"
+  PROD_MAX_SURGE: "25%"
+  STAGING_DEPLOYMENT_STRATEGY: RollingUpdate
+  STAGING_MAX_UNAVAILABLE: "50%"
+  STAGING_MAX_SURGE: "50%"
+
+  # Health check timeouts
+  PROD_HEALTH_CHECK_TIMEOUT: "900s"
+  STAGING_HEALTH_CHECK_TIMEOUT: "600s"
+
 jobs:
-  # DEV:
-  #   if: github.ref == 'refs/heads/dev'
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v3
-  #       with:
-  #         fetch-depth: 0
-  #         submodules: true # Automatically initializes and updates submodules
-
-  #     - name: Configure AWS Credentials
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #         aws-region: ap-southeast-1
-
-  #     - name: Login to Amazon ECR
-  #       uses: aws-actions/amazon-ecr-login@v2
-
-  #     - name: Generate Tag Version
-  #       id: version
-  #       uses: paulhatch/semantic-version@v4.0.2
-  #       with:
-  #         bump_each_commit: true
-
-  #     - name: Create ECR repository
-  #       run: |
-  #         aws --region ap-southeast-1 ecr describe-repositories \
-  #         --repository-names ${{env.ENV_DEV}}/${{env.IMAGE_NAME}} || \
-  #         aws --region ap-southeast-1 ecr create-repository \
-  #         --repository-name ${{env.ENV_DEV}}/${{env.IMAGE_NAME}}
-
-  #     - name: Build & Tag & Push Docker image
-  #       env:
-  #         TAG: ${{steps.version.outputs.version}}
-  #       run: |
-  #         DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-  #         docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-  #         docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-
-  #     - name: Helm Deploy Service on dev
-  #       id: 'helm-dev'
-  #       env:
-  #         TAG: ${{steps.version.outputs.version}}
-  #       run: |
-  #         aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{env.EKS_CLUSTER}}
-  #         curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-  #         chmod 700 get_helm.sh
-  #         bash get_helm.sh
-  #         helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
-  #         helm upgrade -n ${{ env.NAMESPACE_DEV }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-dev.yaml --set tagImage=${{env.TAG}} --atomic --timeout 30m0s
-            
-  #     - name: Slack Notification Success
-  #       if: ${{ success() }}
-  #       #uses: rtCamp/action-slack-notify@v2
-  #       uses: olli-ai/slack-notify-action-gke@master
-  #       env:
-  #         SLACK_CHANNEL: alert-services
-  #         SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-  #         SLACK_LINK_NAMES: true
-  #         SLACK_MESSAGE: ':bell: FINISHED'
-  #         SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
-  #         SLACK_USERNAME: devops
-  #         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
-  #     - name: Slack Notification Failed
-  #       if: ${{ failure() && steps.helm-dev.conclusion == 'failure' }}
-  #       #uses: rtCamp/action-slack-notify@v2
-  #       uses: olli-ai/slack-notify-action-gke@master
-  #       env:
-  #         SLACK_CHANNEL: alert-services
-  #         SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-  #         SLACK_LINK_NAMES: true
-  #         SLACK_MESSAGE: ':x: ERROR'
-  #         SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
-  #         SLACK_USERNAME: devops
-  #         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-     
-  STAGING:
-    if: github.ref == 'refs/heads/master'
-    runs-on: large-runner
-    permissions:
-      contents: read
-      packages: write
-
+  # Determine deployment strategy
+  SETUP:
+    runs-on: ubuntu-latest
+    outputs:
+      # deploy-staging: ${{ steps.strategy.outputs.deploy-staging }}
+      # deploy-production: ${{ steps.strategy.outputs.deploy-production }}
+      version: ${{ steps.version.outputs.version }}
+      regions: ${{ steps.regions.outputs.regions }}
+      regions-matrix: ${{ steps.regions.outputs.regions-matrix }}
+      environment: ${{ steps.strategy.outputs.environment }}
+      environments-matrix: ${{ steps.strategy.outputs.environments-matrix }}
+      region-config: ${{ steps.regions.outputs.region-config }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: true # Automatically initializes and updates submodules
+          submodules: true
+
+      - name: Generate Tag Version
+        id: version
+        uses: paulhatch/semantic-version@v5.4.0
+        with:
+          bump_each_commit: true
+          tag_prefix: "v"
+
+      - name: Determine deployment strategy
+        id: strategy
+        run: |
+          ENVIRONMENTS=()
+
+          if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_DEV }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.DEV_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
+            ENVIRONMENTS+=("${{ env.ENVIRONMENT_DEV }}")
+          fi
+
+          if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.STAGING_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
+            ENVIRONMENTS+=("${{ env.ENVIRONMENT_STAGING }}")
+          fi
+          
+          if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.PRODUCTION_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
+            ENVIRONMENTS+=("${{ env.ENVIRONMENT_PRODUCTION }}")
+          fi
+          
+          # Create JSON array for matrix strategy
+          if [ ${#ENVIRONMENTS[@]} -gt 0 ]; then
+            ENVIRONMENTS_JSON=$(printf '%s\n' "${ENVIRONMENTS[@]}" | jq -R . | jq -s -c .)
+            echo "environments-matrix=${ENVIRONMENTS_JSON}" >> $GITHUB_OUTPUT
+            echo "environment=${ENVIRONMENTS[0]}" >> $GITHUB_OUTPUT
+          else
+            echo "environments-matrix=[]" >> $GITHUB_OUTPUT
+            echo "environment=none" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Parse regions and create configuration
+        id: regions
+        run: |
+          regions="${{ inputs.regions }}"
+          environment="${{ steps.strategy.outputs.environment }}"
+
+          # if [[ "$environment" == "${{ env.ENVIRONMENT_DEV }}" ]]; then
+          #   regions="ap-southeast-1"
+          # fi
+
+
+          echo "regions=${regions}" >> $GITHUB_OUTPUT
+          
+          # Convert comma-separated regions to JSON array for matrix
+          IFS=',' read -ra REGION_ARRAY <<< "$regions"
+
+          # Filter regions that have corresponding values YAML files
+          VALID_REGIONS=()
+          for region in "${REGION_ARRAY[@]}"; do
+            VALUES_FILE="values-${environment}-${region}.yaml"
+            if [[ -f "$VALUES_FILE" ]]; then
+              echo "✅ Found $VALUES_FILE"
+              VALID_REGIONS+=("$region")
+            else
+              echo "⚠️ Missing $VALUES_FILE — skipping region $region"
+            fi
+          done
+
+          REGIONS_JSON=$(printf '%s\n' "${VALID_REGIONS[@]}" | jq -R . | jq -cs .)
+          echo "regions-matrix=${REGIONS_JSON}" >> $GITHUB_OUTPUT
+          
+          # Create region configuration JSON
+          cat > region_config.json << EOF
+          {
+            "${{ env.PRIMARY_REGION }}": {
+              "registry": "${{ env.AWS_ACCOUNT_ID }}.${{ env.ECR_DOMAIN }}.${{ env.PRIMARY_REGION }}.${{ env.ECR_SUFFIX }}",
+              "cluster": "${{ env.EKS_CLUSTER_PRIMARY }}"
+            },
+            "${{ env.SECONDARY_REGION }}": {
+              "registry": "${{ env.AWS_ACCOUNT_ID }}.${{ env.ECR_DOMAIN }}.${{ env.SECONDARY_REGION }}.${{ env.ECR_SUFFIX }}",
+              "cluster": "${{ env.EKS_CLUSTER_SECONDARY }}"
+            }
+          }
+          EOF
+          
+          REGION_CONFIG=$(cat region_config.json | jq -c .)
+          echo "region-config=${REGION_CONFIG}" >> $GITHUB_OUTPUT
+
+  # Build and push images
+  BUILD_AND_PUSH:
+    needs: [SETUP]
+    # if: needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true'
+    runs-on: large-runner
+    strategy:
+      matrix:
+        region: ${{ fromJson(needs.SETUP.outputs.regions-matrix) }}
+        environment: ${{ fromJson(needs.SETUP.outputs.environments-matrix) }}
+      fail-fast: false  # Important: Don't fail fast so we can track individual results
+    outputs:
+      version: ${{ needs.SETUP.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-southeast-1
+          aws-region: ${{ matrix.region }}
+          role-duration-seconds: 3600
 
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Generate Tag Version
-        id: version
-        uses: paulhatch/semantic-version@v4.0.2
-        with:
-          bump_each_commit: true
-
-      - name: Create ECR repository
+      - name: Set dynamic environment variables
         run: |
-          aws --region ap-southeast-1 ecr describe-repositories \
-          --repository-names ${{env.ENV_STG}}/${{env.IMAGE_NAME}} || \
-          aws --region ap-southeast-1 ecr create-repository \
-          --repository-name ${{env.ENV_STG}}/${{env.IMAGE_NAME}}
-    
-      - name: Build & Tag & Push Docker image
-        env:
-          TAG: ${{steps.version.outputs.version}}
+          # Parse region configuration
+          REGION_CONFIG='${{ needs.SETUP.outputs.region-config }}'
+          REGISTRY=$(echo $REGION_CONFIG | jq -r '.["${{ matrix.region }}"].registry')
+          echo "REGISTRY=${REGISTRY}" >> $GITHUB_ENV
+          
+          # Set target environment based on deployment type
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_DEV }}" ]]; then
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_DEV }}" >> $GITHUB_ENV
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]]; then
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_STAGING }}" >> $GITHUB_ENV
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_PRODUCTION }}" >> $GITHUB_ENV
+          fi
+
+      - name: Login to ECR
         run: |
-          DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          
-          - name: Helm Deploy Service on staging
-          id: 'helm-stg'
-          env:
-            TAG: ${{steps.version.outputs.version}}
-          run: |
-            aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{env.EKS_CLUSTER}}
-            curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-            chmod 700 get_helm.sh
-            bash get_helm.sh
-            helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
-            helm upgrade -n ${{ env.NAMESPACE_STG }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-stg.yaml --set tagImage=${{env.TAG}} --atomic --timeout 30m0s
-            
-      - name: Slack Notification Success
-        if: ${{ success() }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action-gke@master
+          aws ecr get-login-password --region ${{ matrix.region }} | docker login --username AWS --password-stdin ${{ env.REGISTRY }}
+
+      - name: Build and push Docker image
         env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
-      - name: Slack Notification Failed
-        if: ${{ failure() && steps.helm-stg.conclusion == 'failure' }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action-gke@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy on ${{ env.ENV_DEV }}: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          TAG: ${{ needs.SETUP.outputs.version }}
+        run: |
+          # Create repository if it doesn't exist
+          aws ecr describe-repositories --region ${{ matrix.region }} --repository-names ${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }} || \
+          aws ecr create-repository --region ${{ matrix.region }} --repository-name ${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}
           
-  # UAT:
-  #   if: github.ref == 'refs/heads/pre-production'
-  #   runs-on: large-runner
-  #   permissions:
-  #     contents: read
-  #     packages: write
+          # Build and push with cache
+          docker buildx build \
+            --platform ${{ env.BUILD_PLATFORM }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:cache,mode=max \
+            --tag ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ env.TAG }} \
+            --tag ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:latest \
+            --push \
+            .
 
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v3
-  #       with:
-  #         fetch-depth: 0
-
-  #     - id: 'auth'
-  #       uses: 'google-github-actions/auth@v1'
-  #       with:
-  #         credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
-
-  #     - name: Log in to the Container registry
-  #       uses: docker/login-action@v2
-  #       with:
-  #         registry: ${{ env.REGISTRY }}
-  #         username: _json_key
-  #         password: ${{ secrets.GCP_CREDENTIALS }}
-
-  #     - name: Generate Tag Version
-  #       id: version
-  #       uses: paulhatch/semantic-version@v4.0.2
-  #       with:
-  #         bump_each_commit: true
-
-  #     - name: Build & Tag & Push Docker image
-  #       env:
-  #         TAG: ${{steps.version.outputs.version}}
-  #       run: |
-  #         DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-  #         docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-  #         docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-
-  #     - id: 'get-credentials'
-  #       uses: 'google-github-actions/get-gke-credentials@v1'
-  #       with:
-  #         cluster_name: 'olli-ai'
-  #         location: 'asia-southeast1'
+      - name: Report build status to step summary
+        if: always()
+        run: |
+          JOB_ID="${{ matrix.region }}-${{ matrix.environment }}-build"
           
-  #     - name: Helm Deploy Service on uat
-  #       id: 'helm-uat'
-  #       env:
-  #         TAG: ${{steps.version.outputs.version}}
-  #       run: |
-  #         curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-  #         chmod 700 get_helm.sh
-  #         bash get_helm.sh
-  #         helm pull oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service
-  #         helm upgrade -n ${{ env.NAMESPACE_PRE-PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/helm-chart/all-service --install --wait -f values-uat.yaml --set tagImage=${{env.TAG}} --atomic --timeout 30m0s
-            
-  #     - name: Slack Notification Success
-  #       if: ${{ success() }}
-  #       #uses: rtCamp/action-slack-notify@v2
-  #       uses: olli-ai/slack-notify-action-gke@master
-  #       env:
-  #         SLACK_CHANNEL: alert-services
-  #         SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-  #         SLACK_LINK_NAMES: true
-  #         SLACK_MESSAGE: ':bell: FINISHED'
-  #         SLACK_TITLE: 'Status Deploy on ${{ env.ENV_PRE-PROD }}: ${{ env.APP_NAME }}'
-  #         SLACK_USERNAME: devops
-  #         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-    
-  #     - name: Slack Notification Failed
-  #       if: ${{ failure() && steps.helm-uat.conclusion == 'failure' }}
-  #       #uses: rtCamp/action-slack-notify@v2
-  #       uses: olli-ai/slack-notify-action-gke@master
-  #       env:
-  #         SLACK_CHANNEL: alert-services
-  #         SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-  #         SLACK_LINK_NAMES: true
-  #         SLACK_MESSAGE: ':x: ERROR'
-  #         SLACK_TITLE: 'Status Deploy on ${{ env.ENV_PRE-PROD }}: ${{ env.APP_NAME }}'
-  #         SLACK_USERNAME: devops
-  #         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-                    
-  #     # - name: Trigger Deploy Service to Production
-  #     #   #uses: trstringer/manual-approval@v1
-  #     #   uses: olli-ai/manual-approval-action@master
-  #     #   timeout-minutes: 1
-  #     #   with:
-  #     #     secret: ${{ secrets.TOKEN }}
-  #     #     approvers: ${{ inputs.approvers }}
-  #     #     minimum-approvals: 1
-      
-  #     - name: Change Tag Image Production
-  #       env:        
-  #         TAG: ${{steps.version.outputs.version}}
-  #       run: |
-  #         docker pull ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-  #         docker tag ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} 
-  #         docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-  #         docker tag ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
-  #         docker push ${{env.REGISTRY}}/${{ env.PROJECT_NAME }}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:latest
-  #   # outputs:
-  #   #   output1: ${{ steps.version.outputs.version }}
-      
-  PRODUCTION:
-    if: github.ref == 'refs/heads/production'
+          if [[ "${{ job.status }}" == "success" ]]; then
+            STATUS="Success"
+            EXIT_CODE=0
+          else
+            STATUS="Failed"
+            EXIT_CODE=1
+          fi
+          
+          echo "### Build Status: $STATUS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ matrix.region }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Job ID**: ${JOB_ID}" >> $GITHUB_STEP_SUMMARY
+          
+          # Create a unique comment that the summary job can parse
+          echo "BUILD_RESULT:${JOB_ID}:${STATUS}" >> $GITHUB_STEP_SUMMARY
+
+  # General deployment job that handles both staging and production
+  DEPLOY:
+    needs: [SETUP, BUILD_AND_PUSH]
+    # if: needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true'
     runs-on: large-runner
-    permissions:
-      contents: read
-      packages: write
-
+    strategy:
+      matrix:
+        region: ${{ fromJson(needs.SETUP.outputs.regions-matrix) }}
+        environment: ${{ fromJson(needs.SETUP.outputs.environments-matrix) }}
+      fail-fast: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-southeast-1
+          aws-region: ${{ matrix.region }}
 
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Set dynamic environment variables
+        run: |
+          # Parse region configuration
+          REGION_CONFIG='${{ needs.SETUP.outputs.region-config }}'
+          REGISTRY=$(echo $REGION_CONFIG | jq -r '.["${{ matrix.region }}"].registry')
+          CLUSTER=$(echo $REGION_CONFIG | jq -r '.["${{ matrix.region }}"].cluster')
+          echo "REGISTRY=${REGISTRY}" >> $GITHUB_ENV
+          echo "CLUSTER=${CLUSTER}" >> $GITHUB_ENV
+          
+          # Build region-specific Helm chart URL
+          HELM_CHART_URL="oci://${REGISTRY}/${{ env.HELM_CHART_PATH }}/${{ env.HELM_CHART_NAME }}"
+          echo "HELM_CHART_URL=${HELM_CHART_URL}" >> $GITHUB_ENV
+          
+          # Set namespace and target environment based on deployment type
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_DEV }}" ]]; then
+            echo "NAMESPACE=${{ env.NAMESPACE_DEV }}" >> $GITHUB_ENV
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_DEV }}" >> $GITHUB_ENV
+            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_DEV }}" >> $GITHUB_ENV
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]]; then
+            echo "NAMESPACE=${{ env.NAMESPACE_STG }}" >> $GITHUB_ENV
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_STAGING }}" >> $GITHUB_ENV
+            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_STAGING }}" >> $GITHUB_ENV
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
+            echo "NAMESPACE=${{ env.NAMESPACE_PROD }}" >> $GITHUB_ENV
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_PRODUCTION }}" >> $GITHUB_ENV
+            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_PRODUCTION }}" >> $GITHUB_ENV
+          fi
 
-      - name: Generate Tag Version
-        id: version
-        uses: paulhatch/semantic-version@v4.0.2
+      - name: Install and configure kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          aws eks update-kubeconfig --region ${{ matrix.region }} --name ${{ env.CLUSTER }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
         with:
-          bump_each_commit: true
+          version: ${{ env.HELM_VERSION }}
 
-      - name: Create ECR repository
+      - name: Verify deployment prerequisites
         run: |
-          aws --region ap-southeast-1 ecr describe-repositories \
-          --repository-names ${{env.ENV_PROD}}/${{env.IMAGE_NAME}} || \
-          aws --region ap-southeast-1 ecr create-repository \
-          --repository-name ${{env.ENV_PROD}}/${{env.IMAGE_NAME}}
-      - name: Build & Tag & Push Docker image
-        env:
-          TAG: ${{steps.version.outputs.version}}
-        run: |
-          DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
-          docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-          docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
+          # Check if values file exists
+          VALUES_FILE="values-${{ matrix.environment }}-${{ matrix.region }}.yaml"
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "Error: $VALUES_FILE not found!"
+            echo "Expected: $VALUES_FILE"
+            ls -la values-*.yaml || true
+            exit 1
+          fi
+          echo "✅ Found values file: $VALUES_FILE"
+          
+          # Check namespace
+          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Verify cluster connectivity
+          kubectl cluster-info
 
-      - name: Helm Deploy Service on Production
-        id: 'helm-prod'
+      - name: Deploy with Helm
         env:
-          TAG: ${{steps.version.outputs.version}}
+          TAG: ${{ needs.SETUP.outputs.version }}
         run: |
-          aws --region ap-southeast-1 eks update-kubeconfig --region ap-southeast-1 --name ${{env.EKS_CLUSTER}}
-          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-          chmod 700 get_helm.sh
-          bash get_helm.sh
-          helm pull oci://${{env.REGISTRY}}/helm-chart/all-service
-          helm upgrade -n ${{ env.NAMESPACE_PROD }} ${{ env.APP_NAME }} oci://${{env.REGISTRY}}/helm-chart/all-service --install --wait -f values-prod.yaml --set tagImage=${{env.TAG}} --atomic --timeout 30m0s
-      - name: Slack Notification Success
-        if: ${{ success() }}
-        #uses: rtCamp/action-slack-notify@v2
+          VALUES_FILE="values-${{ matrix.environment }}-${{ matrix.region }}.yaml"
+          
+          # Login to ECR
+          aws ecr get-login-password --region ${{ matrix.region }} | docker login --username AWS --password-stdin ${{ env.REGISTRY }}
+          
+          # Set deployment strategy based on environment
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
+            DEPLOYMENT_STRATEGY="${{ env.PROD_DEPLOYMENT_STRATEGY }}"
+            MAX_UNAVAILABLE="${{ env.PROD_MAX_UNAVAILABLE }}"
+            MAX_SURGE="${{ env.PROD_MAX_SURGE }}"
+          else
+            DEPLOYMENT_STRATEGY="${{ env.STAGING_DEPLOYMENT_STRATEGY }}"
+            MAX_UNAVAILABLE="${{ env.STAGING_MAX_UNAVAILABLE }}"
+            MAX_SURGE="${{ env.STAGING_MAX_SURGE }}"
+          fi
+          
+          # Deploy with retry logic
+          for i in $(seq 1 ${{ env.MAX_RETRIES }}); do
+            if helm upgrade ${{ env.APP_NAME }} ${{ env.HELM_CHART_URL }} \
+              --install \
+              --namespace ${{ env.NAMESPACE }} \
+              --wait \
+              --timeout ${{ env.HELM_TIMEOUT }} \
+              --values $VALUES_FILE \
+              --set tagImage=${{ env.TAG }} \
+              --set region=${{ matrix.region }} \
+              --set environment=${{ matrix.environment }} \
+              --set deploymentStrategy=$DEPLOYMENT_STRATEGY \
+              --set rollingUpdate.maxUnavailable=$MAX_UNAVAILABLE \
+              --set rollingUpdate.maxSurge=$MAX_SURGE \
+              --atomic; then
+              echo "✅ Deployment successful with $VALUES_FILE using chart: ${{ env.HELM_CHART_URL }}"
+              break
+            else
+              echo "❌ Deployment attempt $i failed"
+              if [ $i -eq ${{ env.MAX_RETRIES }} ]; then
+                echo "💥 All deployment attempts failed"
+                exit 1
+              fi
+              sleep 30
+            fi
+          done
+
+      - name: Verify deployment
+        run: |
+          # Set timeout based on environment
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
+            TIMEOUT="${{ env.PROD_HEALTH_CHECK_TIMEOUT }}"
+          else
+            TIMEOUT="${{ env.STAGING_HEALTH_CHECK_TIMEOUT }}"
+          fi
+          
+          kubectl rollout status deployment/${{ env.APP_NAME }} -n ${{ env.NAMESPACE }} --timeout=$TIMEOUT
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=${{ env.APP_NAME }}
+
+      - name: Run health checks
+        run: |
+          echo "Running health checks for ${{ matrix.environment }} in ${{ matrix.region }}"
+          
+          # Environment-specific health checks
+          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
+            echo "Running comprehensive production health checks"
+            # Add comprehensive production health check commands here
+          else
+            echo "Running basic staging smoke tests"
+            # Add staging smoke test commands here
+          fi
+          
+          # Common health checks for all environments
+          # kubectl run health-check --image=your-health-check-image --rm -i --restart=Never -- /run-health-checks.sh
+
+      - name: Report deployment status to step summary
+        if: always()
+        run: |
+          JOB_ID="${{ matrix.region }}-${{ matrix.environment }}-deploy"
+          
+          if [[ "${{ needs.BUILD_AND_PUSH.result }}" != "success" ]]; then
+            STATUS="Skipped (Build Failed)"
+          elif [[ "${{ job.status }}" == "success" ]]; then
+            STATUS="Success"
+          else
+            STATUS="Failed"
+          fi
+          
+          echo "### Deploy Status: $STATUS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ matrix.region }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Job ID**: ${JOB_ID}" >> $GITHUB_STEP_SUMMARY
+          
+          # Create a unique comment that the summary job can parse
+          echo "DEPLOY_RESULT:${JOB_ID}:${STATUS}" >> $GITHUB_STEP_SUMMARY
+
+  # Deployment summary
+  SUMMARY:
+    needs: [ SETUP, BUILD_AND_PUSH, DEPLOY ]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Get individual job results via GitHub API
+        id: get_results
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get workflow run details via GitHub API
+          RUN_ID="${{ github.run_id }}"
+          REPO="${{ github.repository }}"
+          API_URL="https://api.github.com/repos/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100"
+
+          echo "Fetching job data from GitHub API..."
+          echo "API URL: $API_URL"
+          
+          # Make API call with proper error handling
+          HTTP_STATUS=$(curl -sSL -w "%{http_code}" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$API_URL" -o jobs.json)
+          
+          echo "HTTP Status: $HTTP_STATUS"
+          
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "ERROR: GitHub API returned status $HTTP_STATUS"
+            echo "Response content:"
+            cat jobs.json
+            exit 1
+          fi
+          
+          # Validate JSON structure
+          if ! jq empty jobs.json 2>/dev/null; then
+            echo "ERROR: Invalid JSON response"
+            echo "Response content:"
+            cat jobs.json
+            exit 1
+          fi
+          
+          # Check if 'jobs' key exists
+          if ! jq -e '.jobs' jobs.json > /dev/null; then
+            echo "ERROR: Invalid GitHub API response. 'jobs' key not found."
+            echo "Available keys:"
+            jq 'keys' jobs.json 2>/dev/null || echo "Cannot determine keys"
+            echo "Full response:"
+            cat jobs.json
+            exit 1
+          fi
+          
+          # Verify we have jobs
+          JOBS_COUNT=$(jq '.jobs | length' jobs.json)
+          echo "Found $JOBS_COUNT jobs"
+          
+          if [ "$JOBS_COUNT" -eq 0 ]; then
+            echo "WARNING: No jobs found. This might be normal for a fresh workflow run."
+            # Set safe defaults
+            echo "build_jobs_found=0" >> $GITHUB_OUTPUT
+            echo "deploy_jobs_found=0" >> $GITHUB_OUTPUT
+            echo "slack_color=warning" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "=== JOB LISTING ==="
+          jq -r '.jobs[] | "- \(.name) (\(.conclusion // "running"))"' jobs.json
+          
+          echo "=== BUILD JOBS ==="
+          BUILD_RESULTS=""
+          while IFS= read -r line; do
+            if [[ -n "$line" && "$line" != "null" ]]; then
+              echo "Build job: $line"
+              [[ -z "$BUILD_RESULTS" ]] && BUILD_RESULTS="$line" || BUILD_RESULTS="$BUILD_RESULTS,$line"
+            fi
+          done < <(jq -r '.jobs[] | select(.name | test("BUILD_AND_PUSH")) | "\(.name):\(.conclusion // "unknown")"' jobs.json)
+          
+          echo "=== DEPLOY JOBS ==="
+          DEPLOY_RESULTS=""
+          while IFS= read -r line; do
+            if [[ -n "$line" && "$line" != "null" ]]; then
+              echo "Deploy job: $line"
+              [[ -z "$DEPLOY_RESULTS" ]] && DEPLOY_RESULTS="$line" || DEPLOY_RESULTS="$DEPLOY_RESULTS,$line"
+            fi
+          done < <(jq -r '.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not)) | "\(.name):\(.conclusion // "unknown")"' jobs.json)
+          
+          # Count jobs
+          BUILD_JOBS_COUNT=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH"))] | length' jobs.json)
+          DEPLOY_JOBS_COUNT=$(jq '[.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not))] | length' jobs.json)
+          
+          echo "build_jobs_found=$BUILD_JOBS_COUNT" >> $GITHUB_OUTPUT
+          echo "deploy_jobs_found=$DEPLOY_JOBS_COUNT" >> $GITHUB_OUTPUT
+          
+          # Determine overall success
+          BUILD_FAILURES=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH")) | select(.conclusion != "success")] | length' jobs.json)
+          DEPLOY_FAILURES=$(jq '[.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not)) | select(.conclusion != "success")] | length' jobs.json)
+          
+          echo "Build failures: $BUILD_FAILURES"
+          echo "Deploy failures: $DEPLOY_FAILURES"
+          
+          if [[ "$BUILD_FAILURES" -eq 0 && "$DEPLOY_FAILURES" -eq 0 ]]; then
+            echo "slack_color=good" >> $GITHUB_OUTPUT
+          else
+            echo "slack_color=danger" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate detailed status report
+        id: detailed_report
+        run: |
+          if [ ! -f "jobs.json" ]; then
+            echo "ERROR: jobs.json not found"
+            exit 1
+          fi
+          
+          # Parse regions from the setup output
+          REGIONS="${{ needs.SETUP.outputs.regions }}"
+          IFS=',' read -ra REGION_ARRAY <<< "$REGIONS"
+          
+          MESSAGE="Status:\n"
+          
+          # Group results by region
+          for region in "${REGION_ARRAY[@]}"; do
+            MESSAGE+="$region:\n"
+          
+            # Get build status for this region
+            BUILD_STATUS=$(jq -r --arg region "$region" '.jobs[]? | select(.name? // "" | test("BUILD_AND_PUSH.*" + $region)) | .conclusion // "pending"' jobs.json 2>/dev/null || echo "unknown")
+          
+            # Get deploy status for this region  
+            DEPLOY_STATUS=$(jq -r --arg region "$region" '.jobs[]? | select(.name? // "" | test("DEPLOY.*" + $region) and (.name? // "" | test("BUILD_AND_PUSH") | not)) | .conclusion // "pending"' jobs.json 2>/dev/null || echo "unknown")
+          
+            # Format status with emojis for better readability
+            case "$BUILD_STATUS" in
+              "success") BUILD_EMOJI="✅" ;;
+              "failure") BUILD_EMOJI="❌" ;;
+              "cancelled") BUILD_EMOJI="⚠️" ;;
+              "pending"|"in_progress") BUILD_EMOJI="🔄" ;;
+              *) BUILD_EMOJI="❓" ;;
+            esac
+          
+            case "$DEPLOY_STATUS" in
+              "success") DEPLOY_EMOJI="✅" ;;
+              "failure") DEPLOY_EMOJI="❌" ;;
+              "cancelled") DEPLOY_EMOJI="⚠️" ;;
+              "pending"|"in_progress") DEPLOY_EMOJI="🔄" ;;
+              *) DEPLOY_EMOJI="❓" ;;
+            esac
+          
+            MESSAGE+="  BUILD: $BUILD_EMOJI $BUILD_STATUS\n"
+            MESSAGE+="  DEPLOY: $DEPLOY_EMOJI $DEPLOY_STATUS\n"
+          done
+          
+          # Add summary line
+          TOTAL_JOBS=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH|DEPLOY"))] | length' jobs.json 2>/dev/null || echo "0")
+          SUCCESS_JOBS=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH|DEPLOY")) | select(.conclusion == "success")] | length' jobs.json 2>/dev/null || echo "0")
+          
+          MESSAGE+="\nSummary: $SUCCESS_JOBS/$TOTAL_JOBS jobs successful"
+          
+          # Use proper multiline output for GitHub Actions
+          {
+            echo 'message<<EOF'
+            echo -e "$MESSAGE"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+      - name: Send notification
         uses: olli-ai/slack-notify-action-gke@master
         env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
+          SLACK_COLOR: ${{ steps.get_results.outputs.slack_color }}
           SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':bell: FINISHED'
-          SLACK_TITLE: 'Status Deploy Service Production: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-
-      - name: Slack Notification Failed
-        if: ${{ failure() && steps.helm-prod.conclusion == 'failure' }}
-        #uses: rtCamp/action-slack-notify@v2
-        uses: olli-ai/slack-notify-action-gke@master
-        env:
-          SLACK_CHANNEL: alert-services
-          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
-          SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: ':x: ERROR'
-          SLACK_TITLE: 'Status Deploy Service Production: ${{ env.APP_NAME }}'
-          SLACK_USERNAME: devops
+          SLACK_MESSAGE: ${{ steps.detailed_report.outputs.message }}
+          SLACK_TITLE: 'Multi-Region Deployment - ${{ env.APP_NAME }}'
+          SLACK_USERNAME: ${{ env.SLACK_USERNAME }}
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
