@@ -195,6 +195,19 @@ jobs:
           
           # Convert comma-separated regions to JSON array for matrix
           IFS=',' read -ra REGION_ARRAY <<< "$regions"
+
+          # Filter regions that have corresponding values YAML files
+          VALID_REGIONS=()
+          for region in "${REGION_ARRAY[@]}"; do
+            VALUES_FILE="values-${environment}-${region}.yaml"
+            if [[ -f "$VALUES_FILE" ]]; then
+              echo "✅ Found $VALUES_FILE"
+              VALID_REGIONS+=("$region")
+            else
+              echo "⚠️ Missing $VALUES_FILE — skipping region $region"
+            fi
+          done
+          
           REGIONS_JSON=$(printf '%s\n' "${REGION_ARRAY[@]}" | jq -R . | jq -cs .)
           echo "regions-matrix=${REGIONS_JSON}" >> $GITHUB_OUTPUT
           
