@@ -208,7 +208,7 @@ jobs:
             fi
           done
           
-          REGIONS_JSON=$(printf '%s\n' "${REGION_ARRAY[@]}" | jq -R . | jq -cs .)
+          REGIONS_JSON=$(printf '%s\n' "${VALID_REGIONS[@]}" | jq -R . | jq -cs .)
           echo "regions-matrix=${REGIONS_JSON}" >> $GITHUB_OUTPUT
           
           # Create region configuration JSON
