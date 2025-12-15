@@ -10,7 +10,7 @@ on:
       environment:
         required: false
         type: string
-        default: 'auto'  # auto, staging, production
+        default: 'auto'  # auto, staging, production, uat
       regions:
         required: false
         type: string
@@ -40,6 +40,10 @@ on:
         type: string
         default: '5m0s'
       helmTimeoutStaging:
+        required: false
+        type: string
+        default: '10m0s'
+      helmTimeoutUat:
         required: false
         type: string
         default: '10m0s'
@@ -82,12 +86,14 @@ env:
   # Environment names (previously hardcoded)
   ENVIRONMENT_DEV: dev
   ENVIRONMENT_STAGING: staging
+  ENVIRONMENT_UAT: uat
   ENVIRONMENT_PRODUCTION: production
   ENVIRONMENT_AUTO: auto
 
   # Branch mapping (previously hardcoded)
   DEV_BRANCH: dev
   STAGING_BRANCH: master
+  UAT_BRANCH: pre-production
   PRODUCTION_BRANCH: production
 
   # Platform configuration (previously hardcoded)
@@ -110,6 +116,7 @@ env:
   HELM_VERSION: ${{ inputs.helmVersion }}
   HELM_TIMEOUT_DEV: ${{ inputs.helmTimeoutDev }}
   HELM_TIMEOUT_STAGING: ${{ inputs.helmTimeoutStaging }}
+  HELM_TIMEOUT_UAT: ${{ inputs.helmTimeoutUat }}
   HELM_TIMEOUT_PRODUCTION: ${{ inputs.helmTimeoutProduction }}
   MAX_RETRIES: ${{ inputs.maxRetries }}
   KEEP_IMAGE_COUNT: ${{ inputs.keepImageCount }}
@@ -118,12 +125,16 @@ env:
   PROD_DEPLOYMENT_STRATEGY: RollingUpdate
   PROD_MAX_UNAVAILABLE: "25%"
   PROD_MAX_SURGE: "25%"
+  UAT_DEPLOYMENT_STRATEGY: RollingUpdate
+  UAT_MAX_UNAVAILABLE: "50%"
+  UAT_MAX_SURGE: "50%"
   STAGING_DEPLOYMENT_STRATEGY: RollingUpdate
   STAGING_MAX_UNAVAILABLE: "50%"
   STAGING_MAX_SURGE: "50%"
 
   # Health check timeouts
   PROD_HEALTH_CHECK_TIMEOUT: "900s"
+  UAT_HEALTH_CHECK_TIMEOUT: "600s"
   STAGING_HEALTH_CHECK_TIMEOUT: "600s"
 
 jobs:
@@ -164,6 +175,10 @@ jobs:
 
           if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.STAGING_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_STAGING }}")
+          fi
+          
+          if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.UAT_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
+            ENVIRONMENTS+=("${{ env.ENVIRONMENT_UAT }}")
           fi
           
           if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.PRODUCTION_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
@@ -270,6 +285,8 @@ jobs:
             echo "TARGET_ENV=${{ env.ENVIRONMENT_DEV }}" >> $GITHUB_ENV
           elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]]; then
             echo "TARGET_ENV=${{ env.ENVIRONMENT_STAGING }}" >> $GITHUB_ENV
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]]; then
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_UAT }}" >> $GITHUB_ENV
           elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
             echo "TARGET_ENV=${{ env.ENVIRONMENT_PRODUCTION }}" >> $GITHUB_ENV
           fi
@@ -363,6 +380,10 @@ jobs:
             echo "NAMESPACE=${{ env.NAMESPACE_STG }}" >> $GITHUB_ENV
             echo "TARGET_ENV=${{ env.ENVIRONMENT_STAGING }}" >> $GITHUB_ENV
             echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_STAGING }}" >> $GITHUB_ENV
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]]; then
+            echo "NAMESPACE=${{ env.NAMESPACE_PRE_PROD }}" >> $GITHUB_ENV
+            echo "TARGET_ENV=${{ env.ENVIRONMENT_UAT }}" >> $GITHUB_ENV
+            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_UAT }}" >> $GITHUB_ENV
           elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
             echo "NAMESPACE=${{ env.NAMESPACE_PROD }}" >> $GITHUB_ENV
             echo "TARGET_ENV=${{ env.ENVIRONMENT_PRODUCTION }}" >> $GITHUB_ENV
@@ -413,6 +434,10 @@ jobs:
             DEPLOYMENT_STRATEGY="${{ env.PROD_DEPLOYMENT_STRATEGY }}"
             MAX_UNAVAILABLE="${{ env.PROD_MAX_UNAVAILABLE }}"
             MAX_SURGE="${{ env.PROD_MAX_SURGE }}"
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]]; then
+            DEPLOYMENT_STRATEGY="${{ env.UAT_DEPLOYMENT_STRATEGY }}"
+            MAX_UNAVAILABLE="${{ env.UAT_MAX_UNAVAILABLE }}"
+            MAX_SURGE="${{ env.UAT_MAX_SURGE }}"
           else
             DEPLOYMENT_STRATEGY="${{ env.STAGING_DEPLOYMENT_STRATEGY }}"
             MAX_UNAVAILABLE="${{ env.STAGING_MAX_UNAVAILABLE }}"
@@ -451,6 +476,8 @@ jobs:
           # Set timeout based on environment
           if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
             TIMEOUT="${{ env.PROD_HEALTH_CHECK_TIMEOUT }}"
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]]; then
+            TIMEOUT="${{ env.UAT_HEALTH_CHECK_TIMEOUT }}"
           else
             TIMEOUT="${{ env.STAGING_HEALTH_CHECK_TIMEOUT }}"
           fi
@@ -466,6 +493,9 @@ jobs:
           if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
             echo "Running comprehensive production health checks"
             # Add comprehensive production health check commands here
+          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]]; then
+            echo "Running UAT environment health checks"
+            # Add UAT health check commands here
           else
             echo "Running basic staging smoke tests"
             # Add staging smoke test commands here
