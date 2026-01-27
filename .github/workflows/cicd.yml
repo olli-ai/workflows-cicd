@@ -390,13 +390,10 @@ jobs:
             echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_PRODUCTION }}" >> $GITHUB_ENV
           fi
 
-      - name: Install and configure kubectl
+      - name: Configure kubectl for EKS
         run: |
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          kubectl version --client
           aws eks update-kubeconfig --region ${{ matrix.region }} --name ${{ env.CLUSTER }}
+          kubectl version --client
 
       - name: Install Helm
         uses: azure/setup-helm@v4
