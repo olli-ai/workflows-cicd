@@ -76,13 +76,6 @@ jobs:
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_DEV}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
-      - name: Install and configure kubectl
-        run: |
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          kubectl version --client
-
       - name: Helm Deploy Service on dev
         id: 'helm-dev'
         env:
@@ -161,13 +154,6 @@ jobs:
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_STG}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-
-      - name: Install and configure kubectl
-        run: |
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          kubectl version --client
 
       - name: Helm Deploy Service on staging
         id: 'helm-stg'
@@ -248,13 +234,6 @@ jobs:
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_PRE-PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
 
-      - name: Install and configure kubectl
-        run: |
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          kubectl version --client
-
       - name: Helm Deploy Service on uat
         id: 'helm-uat'
         env:
@@ -333,13 +312,6 @@ jobs:
           DOCKER_BUILDKIT=0 docker build -t ${{env.IMAGE_NAME}}:${{env.TAG}} .
           docker tag ${{env.IMAGE_NAME}}:${{env.TAG}} ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
           docker push ${{env.REGISTRY}}/${{env.ENV_PROD}}/${{env.IMAGE_NAME}}:${{env.TAG}}
-
-      - name: Install and configure kubectl
-        run: |
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          kubectl version --client
 
       - name: Helm Deploy Service on Production
         id: 'helm-prod'
