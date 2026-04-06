@@ -34,19 +34,19 @@ on:
       maxRetries:
         required: false
         type: number
-        default: 3
+        default: 1
       helmTimeoutDev:
         required: false
         type: string
-        default: '5m0s'
+        default: '20m0s'
       helmTimeoutStaging:
         required: false
         type: string
-        default: '10m0s'
+        default: '20m0s'
       helmTimeoutProduction:
         required: false
         type: string
-        default: '15m0s'
+        default: '20m0s'
       keepImageCount:
         required: false
         type: number
