@@ -66,7 +66,7 @@ env:
   AWS_ACCOUNT_ID: "905418372464"
 
   # Cluster configurations
-  EKS_CLUSTER_PRIMARY: buddyos
+  EKS_CLUSTER_PRIMARY: buddyos-us-2
   EKS_CLUSTER_SECONDARY: eks-primary-prod-01
 
   # Registry configurations
