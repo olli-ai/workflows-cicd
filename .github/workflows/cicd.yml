@@ -92,7 +92,7 @@ env:
 
   # Branch mapping (previously hardcoded)
   DEV_BRANCH: dev
-  STAGING_BRANCH: master
+  STAGING_BRANCHES: "master,release/*"
   UAT_BRANCH: pre-production
   PRODUCTION_BRANCH: production
 
@@ -173,7 +173,23 @@ jobs:
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_DEV }}")
           fi
 
-          if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.STAGING_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
+          STAGING_MATCH=false
+          if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
+            CURRENT_REF="${{ github.ref }}"
+            IFS=',' read -ra STAGING_PATTERNS <<< "${{ env.STAGING_BRANCHES }}"
+            for pattern in "${STAGING_PATTERNS[@]}"; do
+              # Trim whitespace
+              pattern="${pattern#"${pattern%%[![:space:]]*}"}"
+              pattern="${pattern%"${pattern##*[![:space:]]}"}"
+              full_pattern="refs/heads/$pattern"
+              # Unquoted RHS enables glob matching (e.g. release/*)
+              if [[ "$CURRENT_REF" == $full_pattern ]]; then
+                STAGING_MATCH=true
+                break
+              fi
+            done
+          fi
+          if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]] || [[ "$STAGING_MATCH" == "true" ]]; then
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_STAGING }}")
           fi
           
