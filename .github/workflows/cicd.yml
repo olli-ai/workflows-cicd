@@ -293,7 +293,7 @@ jobs:
             --cache-to type=registry,ref=${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:cache,mode=max \
             --tag ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:${{ env.TAG }} \
             --tag ${{ env.REGISTRY }}/${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}:latest \
-            --build-arg AWS_REGION \
+            --build-arg AWS_REGION=${{ matrix.region }} \
             --push \
             .
 
