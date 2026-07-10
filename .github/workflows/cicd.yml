@@ -31,6 +31,37 @@ on:
         required: false
         type: number
         default: 10
+      # GitOps placement scaffold — used only when CI has to CREATE a missing
+      # placement file in olli-gitops. Existing placements are never overwritten.
+      # Defaults target the shared `all-service` chart; override for own-chart services.
+      helmChartName:
+        required: false
+        type: string
+        default: 'all-service'
+      helmChartVersion:
+        required: false
+        type: string
+        default: '0.0.5'
+      helmChartRepoURL:
+        required: false
+        type: string
+        default: '905418372464.dkr.ecr.ap-southeast-1.amazonaws.com/helm-chart'
+      placementEnabled:
+        required: false
+        type: string
+        default: 'true'   # quoted string in the placement; "false" pauses it
+      tagParam:
+        required: false
+        type: string
+        default: 'tagImage'          # own chart: image.tag
+      repoParam:
+        required: false
+        type: string
+        default: 'unusedImageRepo'   # own chart: image.repository
+      repoValue:
+        required: false
+        type: string
+        default: 'n/a'               # all-service reads repo from values; own chart: ECR repo
     secrets:
       SLACK_WEBHOOK:
         required: true
@@ -340,7 +371,7 @@ jobs:
           token: ${{ steps.gitops-token.outputs.token }}
           path: gitops
 
-      - name: Mirror values + bump tag
+      - name: Scaffold, mirror values + bump tag
         working-directory: gitops
         env:
           SERVICE: ${{ inputs.gitopsService != '' && inputs.gitopsService || inputs.appName }}
@@ -348,13 +379,36 @@ jobs:
           TAG: ${{ needs.SETUP.outputs.version }}
           REGIONS: ${{ needs.SETUP.outputs.regions }}
           REGION_CONFIG: ${{ needs.SETUP.outputs.region-config }}
+          # Scaffold config for placements CI has to create (missing only).
+          PLACEMENT_ENABLED: ${{ inputs.placementEnabled }}
+          CHART_REPO_URL: ${{ inputs.helmChartRepoURL }}
+          CHART_NAME: ${{ inputs.helmChartName }}
+          CHART_VERSION: ${{ inputs.helmChartVersion }}
+          TAG_PARAM: ${{ inputs.tagParam }}
+          REPO_PARAM: ${{ inputs.repoParam }}
+          REPO_VALUE: ${{ inputs.repoValue }}
         run: |
           # yq (mikefarah v4) ships on the ubuntu-latest runner; bump-tag.sh needs it.
           yq --version
 
+          SVC_DIR="services/${SERVICE}"
+          mkdir -p "${SVC_DIR}/values" "${SVC_DIR}/placements"
+
+          # base.yaml (shared values) — create once on first deploy, never overwrite.
+          if [ ! -f "${SVC_DIR}/base.yaml" ]; then
+            cat > "${SVC_DIR}/base.yaml" <<EOF
+          # Auto-created by CI on first deploy. Shared values across ALL placements
+          # for ${SERVICE}; per-env/cluster values files override these. Edit freely —
+          # CI creates this once and never overwrites it.
+          tagImage: "REPLACE_ME"
+          EOF
+            echo "🆕 created ${SVC_DIR}/base.yaml"
+          fi
+
           # Build <env>-<cluster>:values-<env>-<region>.yaml pairs from region-config.
           # The service repo authors values-<env>-<region>.yaml; olli-gitops stores them
           # per placement as services/<service>/values/<env>-<cluster>.yaml.
+          NAMESPACE="service-${ENV}"
           PAIRS=()
           IFS=',' read -ra REGION_ARRAY <<< "$REGIONS"
           for region in "${REGION_ARRAY[@]}"; do
@@ -364,11 +418,39 @@ jobs:
               echo "⚠️ No cluster mapping for region $region — skipping"
               continue
             fi
-            if [[ -f "../service/$SRC" ]]; then
-              echo "✅ Will mirror $SRC → ${ENV}-${CLUSTER}.yaml"
-              PAIRS+=("${ENV}-${CLUSTER}:${SRC}")
-            else
+            if [[ ! -f "../service/$SRC" ]]; then
               echo "⚠️ Missing ../service/$SRC — skipping region $region"
+              continue
+            fi
+            echo "✅ Will mirror $SRC → ${ENV}-${CLUSTER}.yaml"
+            PAIRS+=("${ENV}-${CLUSTER}:${SRC}")
+
+            # Placement file — create if missing, NEVER overwrite an existing one.
+            # (Relative indentation below is preserved after YAML strips the block indent.)
+            PF="${SVC_DIR}/placements/${ENV}-${CLUSTER}.yaml"
+            if [ -f "$PF" ]; then
+              echo "↩️  placement exists, left unchanged: $PF"
+            else
+              VALUES_FILE="${SVC_DIR}/values/${ENV}-${CLUSTER}.yaml"
+              cat > "$PF" <<EOF
+          service: ${SERVICE}
+          enabled: "${PLACEMENT_ENABLED}"
+          releaseName: ${SERVICE}
+          env: ${ENV}
+          cluster: ${CLUSTER}
+          namespace: ${NAMESPACE}
+          chart:
+            repoURL: ${CHART_REPO_URL}
+            name: ${CHART_NAME}
+            version: "${CHART_VERSION}"
+          valuesBase: ${SVC_DIR}/base.yaml
+          valuesFile: ${VALUES_FILE}
+          tagParam: ${TAG_PARAM}
+          tag: "REPLACE_ME"
+          repoParam: ${REPO_PARAM}
+          repo: "${REPO_VALUE}"
+          EOF
+              echo "🆕 created placement: $PF"
             fi
           done
 
@@ -377,7 +459,8 @@ jobs:
             exit 1
           fi
 
-          # Mirror values into olli-gitops, then bump the image tag across placements.
+          # Mirror values into olli-gitops, then bump the image tag across placements
+          # (bump-tag.sh replaces the "REPLACE_ME" tag on both new and existing placements).
           ./scripts/sync-values.sh "$SERVICE" ../service "${PAIRS[@]}"
           ./scripts/bump-tag.sh "$SERVICE" "$ENV" "$TAG"
 
