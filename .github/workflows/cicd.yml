@@ -7,6 +7,10 @@ on:
       appName:
         required: true
         type: string
+      gitopsService:
+        required: false
+        type: string
+        default: ''  # logical key in olli-gitops (services/<key>); defaults to appName
       environment:
         required: false
         type: string
@@ -23,38 +27,6 @@ on:
         required: false
         type: string
         default: 'ap-southeast-1'
-      helmChartName:
-        required: false
-        type: string
-        default: 'all-service'
-      helmVersion:
-        required: false
-        type: string
-        default: '3.14.0'
-      maxRetries:
-        required: false
-        type: number
-        default: 3
-      helmTimeoutDev:
-        required: false
-        type: string
-        default: '5m0s'
-      helmTimeoutDemo:
-        required: false
-        type: string
-        default: '5m0s'
-      helmTimeoutStaging:
-        required: false
-        type: string
-        default: '10m0s'
-      helmTimeoutUat:
-        required: false
-        type: string
-        default: '10m0s'
-      helmTimeoutProduction:
-        required: false
-        type: string
-        default: '15m0s'
       keepImageCount:
         required: false
         type: number
@@ -68,12 +40,18 @@ on:
         required: true
       AWS_SECRET_ACCESS_KEY:
         required: true
+      # GitHub App that can push to olli-gitops (mints a short-lived token per run).
+      # Store App ID + private key as org Actions secrets.
+      GITOPS_APP_ID:
+        required: true
+      GITOPS_APP_PRIVATE_KEY:
+        required: true
 
 env:
   # AWS Account and Registry configurations
   AWS_ACCOUNT_ID: "905418372464"
 
-  # Cluster configurations
+  # Cluster configurations (region -> EKS cluster; also the olli-gitops placement key)
   EKS_CLUSTER_PRIMARY: buddyos-us-2
   EKS_CLUSTER_SECONDARY: eks-primary-prod-01
 
@@ -109,53 +87,16 @@ env:
   SLACK_CHANNEL: alert-services
   SLACK_USERNAME: devops
 
-  # Kubernetes configurations
-  RELEASE_NAME: "chart-k8s"
-  NAMESPACE_DEV: "service-dev"
-  NAMESPACE_DEMO: "service-demo"
-  NAMESPACE_STG: "service-staging"
-  NAMESPACE_PRE_PROD: "service-uat"
-  NAMESPACE_PROD: "service-production"
-
-  # Helm chart configurations
-  HELM_CHART_NAME: ${{ inputs.helmChartName }}
-  HELM_CHART_PATH: helm-chart
-  HELM_VERSION: ${{ inputs.helmVersion }}
-  HELM_TIMEOUT_DEV: ${{ inputs.helmTimeoutDev }}
-  HELM_TIMEOUT_DEMO: ${{ inputs.helmTimeoutDemo }}
-  HELM_TIMEOUT_STAGING: ${{ inputs.helmTimeoutStaging }}
-  HELM_TIMEOUT_UAT: ${{ inputs.helmTimeoutUat }}
-  HELM_TIMEOUT_PRODUCTION: ${{ inputs.helmTimeoutProduction }}
-  MAX_RETRIES: ${{ inputs.maxRetries }}
+  # GitOps repository (Argo CD reconciles from here; CI only mirrors into it)
+  GITOPS_REPO: olli-ai/olli-gitops
+  GITOPS_OWNER: olli-ai
   KEEP_IMAGE_COUNT: ${{ inputs.keepImageCount }}
-
-  # Deployment strategy configurations
-  PROD_DEPLOYMENT_STRATEGY: RollingUpdate
-  PROD_MAX_UNAVAILABLE: "25%"
-  PROD_MAX_SURGE: "25%"
-  UAT_DEPLOYMENT_STRATEGY: RollingUpdate
-  UAT_MAX_UNAVAILABLE: "50%"
-  UAT_MAX_SURGE: "50%"
-  STAGING_DEPLOYMENT_STRATEGY: RollingUpdate
-  STAGING_MAX_UNAVAILABLE: "50%"
-  STAGING_MAX_SURGE: "50%"
-  DEMO_DEPLOYMENT_STRATEGY: RollingUpdate
-  DEMO_MAX_UNAVAILABLE: "50%"
-  DEMO_MAX_SURGE: "50%"
-
-  # Health check timeouts
-  PROD_HEALTH_CHECK_TIMEOUT: "900s"
-  UAT_HEALTH_CHECK_TIMEOUT: "600s"
-  STAGING_HEALTH_CHECK_TIMEOUT: "600s"
-  DEMO_HEALTH_CHECK_TIMEOUT: "600s"
 
 jobs:
   # Determine deployment strategy
   SETUP:
     runs-on: ubuntu-latest
     outputs:
-      # deploy-staging: ${{ steps.strategy.outputs.deploy-staging }}
-      # deploy-production: ${{ steps.strategy.outputs.deploy-production }}
       version: ${{ steps.version.outputs.version }}
       regions: ${{ steps.regions.outputs.regions }}
       regions-matrix: ${{ steps.regions.outputs.regions-matrix }}
@@ -208,15 +149,15 @@ jobs:
           if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]] || [[ "$STAGING_MATCH" == "true" ]]; then
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_STAGING }}")
           fi
-          
+
           if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.UAT_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_UAT }}")
           fi
-          
+
           if [[ "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]] || [[ "${{ github.ref }}" == "refs/heads/${{ env.PRODUCTION_BRANCH }}" && "${{ inputs.environment }}" == "${{ env.ENVIRONMENT_AUTO }}" ]]; then
             ENVIRONMENTS+=("${{ env.ENVIRONMENT_PRODUCTION }}")
           fi
-          
+
           # Create JSON array for matrix strategy
           if [ ${#ENVIRONMENTS[@]} -gt 0 ]; then
             ENVIRONMENTS_JSON=$(printf '%s\n' "${ENVIRONMENTS[@]}" | jq -R . | jq -s -c .)
@@ -233,13 +174,8 @@ jobs:
           regions="${{ inputs.regions }}"
           environment="${{ steps.strategy.outputs.environment }}"
 
-          # if [[ "$environment" == "${{ env.ENVIRONMENT_DEV }}" ]]; then
-          #   regions="ap-southeast-1"
-          # fi
-
-
           echo "regions=${regions}" >> $GITHUB_OUTPUT
-          
+
           # Convert comma-separated regions to JSON array for matrix
           IFS=',' read -ra REGION_ARRAY <<< "$regions"
 
@@ -254,11 +190,12 @@ jobs:
               echo "⚠️ Missing $VALUES_FILE — skipping region $region"
             fi
           done
-          
+
           REGIONS_JSON=$(printf '%s\n' "${VALID_REGIONS[@]}" | jq -R . | jq -cs .)
           echo "regions-matrix=${REGIONS_JSON}" >> $GITHUB_OUTPUT
-          
-          # Create region configuration JSON
+
+          # Create region configuration JSON (region -> ECR registry + EKS cluster).
+          # The cluster name doubles as the olli-gitops placement key (<env>-<cluster>).
           cat > region_config.json << EOF
           {
             "${{ env.PRIMARY_REGION }}": {
@@ -271,14 +208,13 @@ jobs:
             }
           }
           EOF
-          
+
           REGION_CONFIG=$(cat region_config.json | jq -c .)
           echo "region-config=${REGION_CONFIG}" >> $GITHUB_OUTPUT
 
   # Build and push images
   BUILD_AND_PUSH:
     needs: [SETUP]
-    # if: needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -311,7 +247,7 @@ jobs:
           REGION_CONFIG='${{ needs.SETUP.outputs.region-config }}'
           REGISTRY=$(echo $REGION_CONFIG | jq -r '.["${{ matrix.region }}"].registry')
           echo "REGISTRY=${REGISTRY}" >> $GITHUB_ENV
-          
+
           # Set target environment based on deployment type
           if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_DEV }}" ]]; then
             echo "TARGET_ENV=${{ env.ENVIRONMENT_DEV }}" >> $GITHUB_ENV
@@ -336,7 +272,7 @@ jobs:
           # Create repository if it doesn't exist
           aws ecr describe-repositories --region ${{ matrix.region }} --repository-names ${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }} || \
           aws ecr create-repository --region ${{ matrix.region }} --repository-name ${{ env.TARGET_ENV }}/${{ env.IMAGE_NAME }}
-          
+
           # Build and push with cache
           docker buildx build \
             --platform ${{ env.BUILD_PLATFORM }} \
@@ -351,7 +287,7 @@ jobs:
         if: always()
         run: |
           JOB_ID="${{ matrix.region }}-${{ matrix.environment }}-build"
-          
+
           if [[ "${{ job.status }}" == "success" ]]; then
             STATUS="Success"
             EXIT_CODE=0
@@ -359,201 +295,114 @@ jobs:
             STATUS="Failed"
             EXIT_CODE=1
           fi
-          
+
           echo "### Build Status: $STATUS" >> $GITHUB_STEP_SUMMARY
           echo "- **Region**: ${{ matrix.region }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment**: ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Job ID**: ${JOB_ID}" >> $GITHUB_STEP_SUMMARY
-          
+
           # Create a unique comment that the summary job can parse
           echo "BUILD_RESULT:${JOB_ID}:${STATUS}" >> $GITHUB_STEP_SUMMARY
 
-  # General deployment job that handles both staging and production
-  DEPLOY:
+  # GitOps "deploy": mirror this build's values + tag into olli-gitops.
+  # Argo CD reconciles from olli-gitops and rolls out to every cluster the
+  # service is placed on — there is no per-cluster helm upgrade here anymore.
+  UPDATE_GITOPS:
     needs: [SETUP, BUILD_AND_PUSH]
-    # if: needs.SETUP.outputs.deploy-staging == 'true' || needs.SETUP.outputs.deploy-production == 'true'
     runs-on: ubuntu-latest
+    # Only mirror once the image(s) for this build are actually in ECR.
+    if: needs.BUILD_AND_PUSH.result == 'success'
     strategy:
       matrix:
-        region: ${{ fromJson(needs.SETUP.outputs.regions-matrix) }}
         environment: ${{ fromJson(needs.SETUP.outputs.environments-matrix) }}
       fail-fast: false
     steps:
-      - name: Checkout repository
+      - name: Checkout service repository (authoritative values)
         uses: actions/checkout@v4
         with:
+          path: service
           fetch-depth: 0
           submodules: true
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Mint short-lived olli-gitops push token
+        id: gitops-token
+        uses: actions/create-github-app-token@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ matrix.region }}
+          app-id: ${{ secrets.GITOPS_APP_ID }}
+          private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
+          owner: ${{ env.GITOPS_OWNER }}
+          repositories: olli-gitops
 
-      - name: Set dynamic environment variables
-        run: |
-          # Parse region configuration
-          REGION_CONFIG='${{ needs.SETUP.outputs.region-config }}'
-          REGISTRY=$(echo $REGION_CONFIG | jq -r '.["${{ matrix.region }}"].registry')
-          CLUSTER=$(echo $REGION_CONFIG | jq -r '.["${{ matrix.region }}"].cluster')
-          echo "REGISTRY=${REGISTRY}" >> $GITHUB_ENV
-          echo "CLUSTER=${CLUSTER}" >> $GITHUB_ENV
-          
-          # Build region-specific Helm chart URL
-          HELM_CHART_URL="oci://${REGISTRY}/${{ env.HELM_CHART_PATH }}/${{ env.HELM_CHART_NAME }}"
-          echo "HELM_CHART_URL=${HELM_CHART_URL}" >> $GITHUB_ENV
-          
-          # Set namespace and target environment based on deployment type
-          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_DEV }}" ]]; then
-            echo "NAMESPACE=${{ env.NAMESPACE_DEV }}" >> $GITHUB_ENV
-            echo "TARGET_ENV=${{ env.ENVIRONMENT_DEV }}" >> $GITHUB_ENV
-            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_DEV }}" >> $GITHUB_ENV
-          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_DEMO }}" ]]; then
-            echo "NAMESPACE=${{ env.NAMESPACE_DEMO }}" >> $GITHUB_ENV
-            echo "TARGET_ENV=${{ env.ENVIRONMENT_DEMO }}" >> $GITHUB_ENV
-            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_DEMO }}" >> $GITHUB_ENV
-          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_STAGING }}" ]]; then
-            echo "NAMESPACE=${{ env.NAMESPACE_STG }}" >> $GITHUB_ENV
-            echo "TARGET_ENV=${{ env.ENVIRONMENT_STAGING }}" >> $GITHUB_ENV
-            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_STAGING }}" >> $GITHUB_ENV
-          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]]; then
-            echo "NAMESPACE=${{ env.NAMESPACE_PRE_PROD }}" >> $GITHUB_ENV
-            echo "TARGET_ENV=${{ env.ENVIRONMENT_UAT }}" >> $GITHUB_ENV
-            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_UAT }}" >> $GITHUB_ENV
-          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
-            echo "NAMESPACE=${{ env.NAMESPACE_PROD }}" >> $GITHUB_ENV
-            echo "TARGET_ENV=${{ env.ENVIRONMENT_PRODUCTION }}" >> $GITHUB_ENV
-            echo "HELM_TIMEOUT=${{ env.HELM_TIMEOUT_PRODUCTION }}" >> $GITHUB_ENV
-          fi
-
-      - name: Configure kubectl for EKS
-        run: |
-          aws eks update-kubeconfig --region ${{ matrix.region }} --name ${{ env.CLUSTER }}
-          kubectl version --client
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
+      - name: Checkout olli-gitops (reconciled mirror)
+        uses: actions/checkout@v4
         with:
-          version: ${{ env.HELM_VERSION }}
+          repository: ${{ env.GITOPS_REPO }}
+          token: ${{ steps.gitops-token.outputs.token }}
+          path: gitops
 
-      - name: Verify deployment prerequisites
-        run: |
-          # Check if values file exists
-          VALUES_FILE="values-${{ matrix.environment }}-${{ matrix.region }}.yaml"
-          if [ ! -f "$VALUES_FILE" ]; then
-            echo "Error: $VALUES_FILE not found!"
-            echo "Expected: $VALUES_FILE"
-            ls -la values-*.yaml || true
-            exit 1
-          fi
-          echo "✅ Found values file: $VALUES_FILE"
-          
-          # Check namespace
-          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
-          
-          # Verify cluster connectivity
-          kubectl cluster-info
-
-      - name: Deploy with Helm
+      - name: Mirror values + bump tag
+        working-directory: gitops
         env:
+          SERVICE: ${{ inputs.gitopsService != '' && inputs.gitopsService || inputs.appName }}
+          ENV: ${{ matrix.environment }}
           TAG: ${{ needs.SETUP.outputs.version }}
+          REGIONS: ${{ needs.SETUP.outputs.regions }}
+          REGION_CONFIG: ${{ needs.SETUP.outputs.region-config }}
         run: |
-          VALUES_FILE="values-${{ matrix.environment }}-${{ matrix.region }}.yaml"
-          
-          # Login to ECR
-          aws ecr get-login-password --region ${{ matrix.region }} | docker login --username AWS --password-stdin ${{ env.REGISTRY }}
-          
-          # Set deployment strategy based on environment
-          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
-            DEPLOYMENT_STRATEGY="${{ env.PROD_DEPLOYMENT_STRATEGY }}"
-            MAX_UNAVAILABLE="${{ env.PROD_MAX_UNAVAILABLE }}"
-            MAX_SURGE="${{ env.PROD_MAX_SURGE }}"
-          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]]; then
-            DEPLOYMENT_STRATEGY="${{ env.UAT_DEPLOYMENT_STRATEGY }}"
-            MAX_UNAVAILABLE="${{ env.UAT_MAX_UNAVAILABLE }}"
-            MAX_SURGE="${{ env.UAT_MAX_SURGE }}"
-          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_DEMO }}" ]]; then
-            DEPLOYMENT_STRATEGY="${{ env.DEMO_DEPLOYMENT_STRATEGY }}"
-            MAX_UNAVAILABLE="${{ env.DEMO_MAX_UNAVAILABLE }}"
-            MAX_SURGE="${{ env.DEMO_MAX_SURGE }}"
-          else
-            DEPLOYMENT_STRATEGY="${{ env.STAGING_DEPLOYMENT_STRATEGY }}"
-            MAX_UNAVAILABLE="${{ env.STAGING_MAX_UNAVAILABLE }}"
-            MAX_SURGE="${{ env.STAGING_MAX_SURGE }}"
-          fi
-          
-          # Deploy with retry logic
-          for i in $(seq 1 ${{ env.MAX_RETRIES }}); do
-            if helm upgrade ${{ env.APP_NAME }} ${{ env.HELM_CHART_URL }} \
-              --install \
-              --namespace ${{ env.NAMESPACE }} \
-              --wait \
-              --timeout ${{ env.HELM_TIMEOUT }} \
-              --values $VALUES_FILE \
-              --set tagImage=${{ env.TAG }} \
-              --set region=${{ matrix.region }} \
-              --set environment=${{ matrix.environment }} \
-              --set deploymentStrategy=$DEPLOYMENT_STRATEGY \
-              --set rollingUpdate.maxUnavailable=$MAX_UNAVAILABLE \
-              --set rollingUpdate.maxSurge=$MAX_SURGE \
-              --atomic; then
-              echo "✅ Deployment successful with $VALUES_FILE using chart: ${{ env.HELM_CHART_URL }}"
-              break
+          # yq (mikefarah v4) ships on the ubuntu-latest runner; bump-tag.sh needs it.
+          yq --version
+
+          # Build <env>-<cluster>:values-<env>-<region>.yaml pairs from region-config.
+          # The service repo authors values-<env>-<region>.yaml; olli-gitops stores them
+          # per placement as services/<service>/values/<env>-<cluster>.yaml.
+          PAIRS=()
+          IFS=',' read -ra REGION_ARRAY <<< "$REGIONS"
+          for region in "${REGION_ARRAY[@]}"; do
+            CLUSTER=$(echo "$REGION_CONFIG" | jq -r --arg r "$region" '.[$r].cluster')
+            SRC="values-${ENV}-${region}.yaml"
+            if [[ -z "$CLUSTER" || "$CLUSTER" == "null" ]]; then
+              echo "⚠️ No cluster mapping for region $region — skipping"
+              continue
+            fi
+            if [[ -f "../service/$SRC" ]]; then
+              echo "✅ Will mirror $SRC → ${ENV}-${CLUSTER}.yaml"
+              PAIRS+=("${ENV}-${CLUSTER}:${SRC}")
             else
-              echo "❌ Deployment attempt $i failed"
-              if [ $i -eq ${{ env.MAX_RETRIES }} ]; then
-                echo "💥 All deployment attempts failed"
-                exit 1
-              fi
-              sleep 30
+              echo "⚠️ Missing ../service/$SRC — skipping region $region"
             fi
           done
 
-      - name: Verify deployment
-        run: |
-          # Set timeout based on environment
-          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
-            TIMEOUT="${{ env.PROD_HEALTH_CHECK_TIMEOUT }}"
-          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]]; then
-            TIMEOUT="${{ env.UAT_HEALTH_CHECK_TIMEOUT }}"
-          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_DEMO }}" ]]; then
-            TIMEOUT="${{ env.DEMO_HEALTH_CHECK_TIMEOUT }}"
-          else
-            TIMEOUT="${{ env.STAGING_HEALTH_CHECK_TIMEOUT }}"
+          if [ ${#PAIRS[@]} -eq 0 ]; then
+            echo "💥 No values files to mirror for env '$ENV'"
+            exit 1
           fi
-          
-          kubectl rollout status deployment/${{ env.APP_NAME }} -n ${{ env.NAMESPACE }} --timeout=$TIMEOUT
-          kubectl get pods -n ${{ env.NAMESPACE }} -l app=${{ env.APP_NAME }}
 
-      - name: Run health checks
+          # Mirror values into olli-gitops, then bump the image tag across placements.
+          ./scripts/sync-values.sh "$SERVICE" ../service "${PAIRS[@]}"
+          ./scripts/bump-tag.sh "$SERVICE" "$ENV" "$TAG"
+
+      - name: Commit & push to olli-gitops
+        working-directory: gitops
+        env:
+          SERVICE: ${{ inputs.gitopsService != '' && inputs.gitopsService || inputs.appName }}
+          ENV: ${{ matrix.environment }}
+          TAG: ${{ needs.SETUP.outputs.version }}
         run: |
-          echo "Running health checks for ${{ matrix.environment }} in ${{ matrix.region }}"
-          
-          # Environment-specific health checks
-          if [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_PRODUCTION }}" ]]; then
-            echo "Running comprehensive production health checks"
-            # Add comprehensive production health check commands here
-          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_UAT }}" ]]; then
-            echo "Running UAT environment health checks"
-            # Add UAT health check commands here
-          elif [[ "${{ matrix.environment }}" == "${{ env.ENVIRONMENT_DEMO }}" ]]; then
-            echo "Running demo environment health checks"
-            # Add demo health check commands here
+          git config user.name  "olli-ci"
+          git config user.email "ci@olli-ai.com"
+          git add -A
+          if git commit -m "deploy(${SERVICE}/${ENV}): ${TAG}"; then
+            git push
+            echo "✅ Pushed ${SERVICE}/${ENV} @ ${TAG} — Argo CD will reconcile"
           else
-            echo "Running basic staging smoke tests"
-            # Add staging smoke test commands here
+            echo "ℹ️ No changes to mirror for ${SERVICE}/${ENV}"
           fi
-          
-          # Common health checks for all environments
-          # kubectl run health-check --image=your-health-check-image --rm -i --restart=Never -- /run-health-checks.sh
 
-      - name: Report deployment status to step summary
+      - name: Report GitOps status to step summary
         if: always()
         run: |
-          JOB_ID="${{ matrix.region }}-${{ matrix.environment }}-deploy"
-          
+          JOB_ID="${{ matrix.environment }}-gitops"
+
           if [[ "${{ needs.BUILD_AND_PUSH.result }}" != "success" ]]; then
             STATUS="Skipped (Build Failed)"
           elif [[ "${{ job.status }}" == "success" ]]; then
@@ -561,18 +410,17 @@ jobs:
           else
             STATUS="Failed"
           fi
-          
-          echo "### Deploy Status: $STATUS" >> $GITHUB_STEP_SUMMARY
-          echo "- **Region**: ${{ matrix.region }}" >> $GITHUB_STEP_SUMMARY
+
+          echo "### GitOps Sync Status: $STATUS" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment**: ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Job ID**: ${JOB_ID}" >> $GITHUB_STEP_SUMMARY
-          
+
           # Create a unique comment that the summary job can parse
-          echo "DEPLOY_RESULT:${JOB_ID}:${STATUS}" >> $GITHUB_STEP_SUMMARY
+          echo "GITOPS_RESULT:${JOB_ID}:${STATUS}" >> $GITHUB_STEP_SUMMARY
 
   # Deployment summary
   SUMMARY:
-    needs: [ SETUP, BUILD_AND_PUSH, DEPLOY ]
+    needs: [ SETUP, BUILD_AND_PUSH, UPDATE_GITOPS ]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -588,23 +436,23 @@ jobs:
 
           echo "Fetching job data from GitHub API..."
           echo "API URL: $API_URL"
-          
+
           # Make API call with proper error handling
           HTTP_STATUS=$(curl -sSL -w "%{http_code}" \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "$API_URL" -o jobs.json)
-          
+
           echo "HTTP Status: $HTTP_STATUS"
-          
+
           if [ "$HTTP_STATUS" -ne 200 ]; then
             echo "ERROR: GitHub API returned status $HTTP_STATUS"
             echo "Response content:"
             cat jobs.json
             exit 1
           fi
-          
+
           # Validate JSON structure
           if ! jq empty jobs.json 2>/dev/null; then
             echo "ERROR: Invalid JSON response"
@@ -612,7 +460,7 @@ jobs:
             cat jobs.json
             exit 1
           fi
-          
+
           # Check if 'jobs' key exists
           if ! jq -e '.jobs' jobs.json > /dev/null; then
             echo "ERROR: Invalid GitHub API response. 'jobs' key not found."
@@ -622,23 +470,23 @@ jobs:
             cat jobs.json
             exit 1
           fi
-          
+
           # Verify we have jobs
           JOBS_COUNT=$(jq '.jobs | length' jobs.json)
           echo "Found $JOBS_COUNT jobs"
-          
+
           if [ "$JOBS_COUNT" -eq 0 ]; then
             echo "WARNING: No jobs found. This might be normal for a fresh workflow run."
             # Set safe defaults
             echo "build_jobs_found=0" >> $GITHUB_OUTPUT
-            echo "deploy_jobs_found=0" >> $GITHUB_OUTPUT
+            echo "gitops_jobs_found=0" >> $GITHUB_OUTPUT
             echo "slack_color=warning" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           echo "=== JOB LISTING ==="
           jq -r '.jobs[] | "- \(.name) (\(.conclusion // "running"))"' jobs.json
-          
+
           echo "=== BUILD JOBS ==="
           BUILD_RESULTS=""
           while IFS= read -r line; do
@@ -647,31 +495,31 @@ jobs:
               [[ -z "$BUILD_RESULTS" ]] && BUILD_RESULTS="$line" || BUILD_RESULTS="$BUILD_RESULTS,$line"
             fi
           done < <(jq -r '.jobs[] | select(.name | test("BUILD_AND_PUSH")) | "\(.name):\(.conclusion // "unknown")"' jobs.json)
-          
-          echo "=== DEPLOY JOBS ==="
-          DEPLOY_RESULTS=""
+
+          echo "=== GITOPS JOBS ==="
+          GITOPS_RESULTS=""
           while IFS= read -r line; do
             if [[ -n "$line" && "$line" != "null" ]]; then
-              echo "Deploy job: $line"
-              [[ -z "$DEPLOY_RESULTS" ]] && DEPLOY_RESULTS="$line" || DEPLOY_RESULTS="$DEPLOY_RESULTS,$line"
+              echo "GitOps job: $line"
+              [[ -z "$GITOPS_RESULTS" ]] && GITOPS_RESULTS="$line" || GITOPS_RESULTS="$GITOPS_RESULTS,$line"
             fi
-          done < <(jq -r '.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not)) | "\(.name):\(.conclusion // "unknown")"' jobs.json)
-          
+          done < <(jq -r '.jobs[] | select(.name | test("UPDATE_GITOPS")) | "\(.name):\(.conclusion // "unknown")"' jobs.json)
+
           # Count jobs
           BUILD_JOBS_COUNT=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH"))] | length' jobs.json)
-          DEPLOY_JOBS_COUNT=$(jq '[.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not))] | length' jobs.json)
-          
+          GITOPS_JOBS_COUNT=$(jq '[.jobs[] | select(.name | test("UPDATE_GITOPS"))] | length' jobs.json)
+
           echo "build_jobs_found=$BUILD_JOBS_COUNT" >> $GITHUB_OUTPUT
-          echo "deploy_jobs_found=$DEPLOY_JOBS_COUNT" >> $GITHUB_OUTPUT
-          
+          echo "gitops_jobs_found=$GITOPS_JOBS_COUNT" >> $GITHUB_OUTPUT
+
           # Determine overall success
           BUILD_FAILURES=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH")) | select(.conclusion != "success")] | length' jobs.json)
-          DEPLOY_FAILURES=$(jq '[.jobs[] | select(.name | test("DEPLOY") and (test("BUILD_AND_PUSH") | not)) | select(.conclusion != "success")] | length' jobs.json)
-          
+          GITOPS_FAILURES=$(jq '[.jobs[] | select(.name | test("UPDATE_GITOPS")) | select(.conclusion != "success")] | length' jobs.json)
+
           echo "Build failures: $BUILD_FAILURES"
-          echo "Deploy failures: $DEPLOY_FAILURES"
-          
-          if [[ "$BUILD_FAILURES" -eq 0 && "$DEPLOY_FAILURES" -eq 0 ]]; then
+          echo "GitOps failures: $GITOPS_FAILURES"
+
+          if [[ "$BUILD_FAILURES" -eq 0 && "$GITOPS_FAILURES" -eq 0 ]]; then
             echo "slack_color=good" >> $GITHUB_OUTPUT
           else
             echo "slack_color=danger" >> $GITHUB_OUTPUT
@@ -684,24 +532,16 @@ jobs:
             echo "ERROR: jobs.json not found"
             exit 1
           fi
-          
-          # Parse regions from the setup output
+
+          MESSAGE="Status:\n"
+
+          # Build results grouped by region
           REGIONS="${{ needs.SETUP.outputs.regions }}"
           IFS=',' read -ra REGION_ARRAY <<< "$REGIONS"
-          
-          MESSAGE="Status:\n"
-          
-          # Group results by region
+          MESSAGE+="Build (image → ECR):\n"
           for region in "${REGION_ARRAY[@]}"; do
-            MESSAGE+="$region:\n"
-          
-            # Get build status for this region
             BUILD_STATUS=$(jq -r --arg region "$region" '.jobs[]? | select(.name? // "" | test("BUILD_AND_PUSH.*" + $region)) | .conclusion // "pending"' jobs.json 2>/dev/null || echo "unknown")
-          
-            # Get deploy status for this region  
-            DEPLOY_STATUS=$(jq -r --arg region "$region" '.jobs[]? | select(.name? // "" | test("DEPLOY.*" + $region) and (.name? // "" | test("BUILD_AND_PUSH") | not)) | .conclusion // "pending"' jobs.json 2>/dev/null || echo "unknown")
-          
-            # Format status with emojis for better readability
+
             case "$BUILD_STATUS" in
               "success") BUILD_EMOJI="✅" ;;
               "failure") BUILD_EMOJI="❌" ;;
@@ -709,25 +549,32 @@ jobs:
               "pending"|"in_progress") BUILD_EMOJI="🔄" ;;
               *) BUILD_EMOJI="❓" ;;
             esac
-          
-            case "$DEPLOY_STATUS" in
-              "success") DEPLOY_EMOJI="✅" ;;
-              "failure") DEPLOY_EMOJI="❌" ;;
-              "cancelled") DEPLOY_EMOJI="⚠️" ;;
-              "pending"|"in_progress") DEPLOY_EMOJI="🔄" ;;
-              *) DEPLOY_EMOJI="❓" ;;
-            esac
-          
-            MESSAGE+="  BUILD: $BUILD_EMOJI $BUILD_STATUS\n"
-            MESSAGE+="  DEPLOY: $DEPLOY_EMOJI $DEPLOY_STATUS\n"
+
+            MESSAGE+="  $region: $BUILD_EMOJI $BUILD_STATUS\n"
           done
-          
+
+          # GitOps mirror results grouped by environment
+          MESSAGE+="GitOps sync (olli-gitops → Argo CD):\n"
+          while IFS= read -r entry; do
+            [[ -z "$entry" ]] && continue
+            NAME="${entry%%:*}"
+            STATUS="${entry#*:}"
+            case "$STATUS" in
+              "success") EMOJI="✅" ;;
+              "failure") EMOJI="❌" ;;
+              "cancelled") EMOJI="⚠️" ;;
+              "pending"|"in_progress") EMOJI="🔄" ;;
+              *) EMOJI="❓" ;;
+            esac
+            MESSAGE+="  $NAME: $EMOJI $STATUS\n"
+          done < <(jq -r '.jobs[]? | select(.name? // "" | test("UPDATE_GITOPS")) | "\(.name):\(.conclusion // "pending")"' jobs.json 2>/dev/null)
+
           # Add summary line
-          TOTAL_JOBS=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH|DEPLOY"))] | length' jobs.json 2>/dev/null || echo "0")
-          SUCCESS_JOBS=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH|DEPLOY")) | select(.conclusion == "success")] | length' jobs.json 2>/dev/null || echo "0")
-          
+          TOTAL_JOBS=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH|UPDATE_GITOPS"))] | length' jobs.json 2>/dev/null || echo "0")
+          SUCCESS_JOBS=$(jq '[.jobs[] | select(.name | test("BUILD_AND_PUSH|UPDATE_GITOPS")) | select(.conclusion == "success")] | length' jobs.json 2>/dev/null || echo "0")
+
           MESSAGE+="\nSummary: $SUCCESS_JOBS/$TOTAL_JOBS jobs successful"
-          
+
           # Use proper multiline output for GitHub Actions
           {
             echo 'message<<EOF'
@@ -741,6 +588,6 @@ jobs:
           SLACK_COLOR: ${{ steps.get_results.outputs.slack_color }}
           SLACK_LINK_NAMES: true
           SLACK_MESSAGE: ${{ steps.detailed_report.outputs.message }}
-          SLACK_TITLE: 'Multi-Region Deployment - ${{ env.APP_NAME }}'
+          SLACK_TITLE: 'Multi-Region GitOps Deploy - ${{ env.APP_NAME }}'
           SLACK_USERNAME: ${{ env.SLACK_USERNAME }}
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
