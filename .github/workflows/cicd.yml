@@ -397,10 +397,11 @@ jobs:
           # base.yaml (shared values) — create once on first deploy, never overwrite.
           if [ ! -f "${SVC_DIR}/base.yaml" ]; then
             cat > "${SVC_DIR}/base.yaml" <<EOF
-          # Auto-created by CI on first deploy. Shared values across ALL placements
-          # for ${SERVICE}; per-env/cluster values files override these. Edit freely —
+          # Auto-created by CI on first deploy. Shared values for ${SERVICE} across ALL
+          # placements (merged before each per-env/cluster values file). Intentionally
+          # empty: the image tag is injected per placement via the chart's tag parameter
+          # (tagParam/tag), not from here. Add values common to every env/cluster below.
           # CI creates this once and never overwrites it.
-          tagImage: "REPLACE_ME"
           EOF
             echo "🆕 created ${SVC_DIR}/base.yaml"
           fi
