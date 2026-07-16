@@ -476,8 +476,30 @@ jobs:
           git config user.email "ci@olli-ai.com"
           git add -A
           if git commit -m "deploy(${SERVICE}/${ENV}): ${TAG}"; then
-            git push
-            echo "✅ Pushed ${SERVICE}/${ENV} @ ${TAG} — Argo CD will reconcile"
+            # olli-gitops is a shared push target for every service's CI, so main can
+            # move between our checkout and push. Rebase onto the latest main and retry
+            # a few times rather than failing outright on a non-fast-forward rejection.
+            PUSHED=false
+            for i in 1 2 3 4 5; do
+              if git push; then
+                PUSHED=true
+                break
+              fi
+              echo "⚠️ push rejected (attempt ${i}/5), rebasing onto latest origin/main and retrying..."
+              git fetch origin main
+              if ! git rebase origin/main; then
+                echo "💥 rebase conflict against origin/main, aborting"
+                git rebase --abort
+                exit 1
+              fi
+              sleep $(( (RANDOM % 3) + 1 ))
+            done
+            if [ "$PUSHED" = true ]; then
+              echo "✅ Pushed ${SERVICE}/${ENV} @ ${TAG} — Argo CD will reconcile"
+            else
+              echo "💥 Failed to push ${SERVICE}/${ENV} @ ${TAG} after retries"
+              exit 1
+            fi
           else
             echo "ℹ️ No changes to mirror for ${SERVICE}/${ENV}"
           fi
