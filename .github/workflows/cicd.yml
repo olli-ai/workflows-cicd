@@ -31,6 +31,10 @@ on:
         required: false
         type: number
         default: 10
+      buildPlatform:
+        required: false
+        type: string
+        default: 'linux/amd64'  # e.g. 'linux/amd64,linux/arm64' for a multi-arch image (Graviton nodes)
       # GitOps placement scaffold — used only when CI has to CREATE a missing
       # placement file in olli-gitops. Existing placements are never overwritten.
       # Defaults target the shared `all-service` chart; override for own-chart services.
@@ -112,7 +116,7 @@ env:
   PRODUCTION_BRANCH: production
 
   # Platform configuration (previously hardcoded)
-  BUILD_PLATFORM: linux/amd64
+  BUILD_PLATFORM: ${{ inputs.buildPlatform }}
 
   # Notification configuration (previously hardcoded)
   SLACK_CHANNEL: alert-services
@@ -260,6 +264,11 @@ jobs:
         with:
           fetch-depth: 0
           submodules: true
+
+      # ubuntu-latest is amd64: other platforms (arm64 for Graviton) build under QEMU emulation
+      - name: Set up QEMU
+        if: inputs.buildPlatform != 'linux/amd64'
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
